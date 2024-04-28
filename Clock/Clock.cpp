@@ -1,3 +1,33 @@
+/*
+	혼자 사용할 용도로 만들었기 때문에 README 파일을 만들 생각이 없습니다.
+	다만, 혹시 모를 사용자를 위해 주석을 남깁니다.
+
+	정책 변경으로 인해 Win32 프로그램은 원래 환경과 다른 환경에서 실행될 경우
+	윈도우 디펜스에 막히며 간혹, 트로이 목마 프로그램이라 오인하는 경우가 있습니다.
+
+	때문에 실행 파일을 따로 올리지 않으며 코드를 읽을 줄 아시는 분들께만 권장드립니다.
+
+	이 프로그램은 gcc 환경에서 제작되었으며 윈도우 운영체제와 함께 배포되는 msimg32 드라이브(DLL)가 필요합니다(기본 포함).
+
+	배경이 투명한 단순 아날로그 시계 프로그램으로, 운영체제에서 지원하는 GDI 함수만을 이용합니다.
+	곧, 시스템적 변경 사항이 전혀 없습니다.
+
+	사용 방법은 간단합니다.
+	Visual Studio C++에서 해당 코드를 Release 버전으로 컴파일한 후 실행 파일을 눌러 실행합니다.
+
+	기존엔 다중 모니터를 지원하지 않는 프로그램이었으나, 작성자가 다중 모니터를 사용하게 되어 관련 기능을 추가하였습니다.
+
+	지원되는 기능은 다음과 같습니다.
+	1. F1 : 현재 모니터의 좌상단으로 이동합니다.
+	2. F2 : 현재 모니터의 우상단으로 이동합니다.
+	3. F3 : 현재 모니터의 좌하단으로 이동합니다.
+	4. F4 : 현재 모니터의 우하단으로 이동합니다.
+	5. Ctrl + 0, Ctrl + Numpad(0): 다음 모니터를 검색합니다. 곧, 프로그램이 다음 모니터로 이동합니다.
+
+	추후 현재 날짜를 보여주거나, 마지막 위치를 기억하는 등의 기능이 추가될 수 있습니다. 
+	24.04.29, 02:38(AM) 최종 수정
+*/
+
 #include <windows.h>
 #include <math.h>
 #define CLASS_NAME TEXT("AnalogClock from Windows")
@@ -122,7 +152,7 @@ HBITMAP hBitmap, hBitTemp;
 SYSTEMTIME lt;
 HPEN hSecond, hMinute, hHour;
 
-int sx,sy, cx,cy, BorderSize, Position;
+int sx,sy, cx,cy, BorderSize, Position, cMonitors, nMonitor;
 
 struct bwAttributes{
 	COLORREF	rgb;
@@ -184,6 +214,7 @@ void OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 	MaxSize = {cx - BorderSize, cy - BorderSize};
 	MinSize = {MaxSize.x >> 1, MaxSize.y >> 1};
+	cMonitors = GetSystemMetrics(SM_CMONITORS);
 
 	SetTimer(hWnd, 1, 100, NULL);
 }
@@ -264,7 +295,30 @@ void OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 }
 
+BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor, LPARAM dwData){
+	MONITORINFOEX mi;
+	
+	mi.cbSize = sizeof(MONITORINFOEX);
+	GetMonitorInfo(hMonitor, &mi);
+
+	if((mi.dwFlags & MONITORINFOF_PRIMARY) == 0){
+		(*(LPRECT)dwData) = *lprcMonitor;
+		nMonitor = (nMonitor + 1) % cMonitors;
+		return FALSE;
+	}else{
+		if(((nMonitor + 1) % cMonitors) == 0){
+			(*(LPRECT)dwData) = *lprcMonitor;
+			nMonitor = (nMonitor + 1) % cMonitors;
+			return FALSE;
+		}
+		return TRUE;
+	}
+}
+
 void OnKeyDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	static RECT rtMultipleMonitor;
+	BOOL bCtrl = (GetKeyState(VK_CONTROL) & 0x8000);
+
 	switch(wParam){
 		case VK_ESCAPE:
 			if(MessageBox(hWnd, TEXT("Do you want quit this program?"), TEXT("Program: Analog Clock"), MB_YESNO) == IDYES){
@@ -309,19 +363,28 @@ void OnKeyDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			break;
 
 		case VK_F1:
-			SetWindowPos(hWnd, NULL, 0,0, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
 			break;
 
 		case VK_F2:
-			SetWindowPos(hWnd, NULL, GetSystemMetrics(SM_CXSCREEN) - (crt.right - crt.left),0, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
 			break;
 
 		case VK_F3:
-			SetWindowPos(hWnd, NULL, 0, GetSystemMetrics(SM_CYSCREEN) - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
 			break;
 
 		case VK_F4:
-			SetWindowPos(hWnd, NULL, GetSystemMetrics(SM_CXSCREEN) - (crt.right - crt.left), GetSystemMetrics(SM_CYSCREEN) - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			break;
+
+		case 0x30:
+		case VK_NUMPAD0:
+			if(bCtrl && cMonitors > 1){
+				EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)&rtMultipleMonitor);
+				SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.top, 0,0, SWP_NOZORDER | SWP_NOSIZE);
+				GetWindowRect(hWnd, &wrt);
+			}
 			break;
 	}
 }
