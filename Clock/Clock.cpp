@@ -146,7 +146,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 
 
-RECT crt, wrt, srt;
+BOOL bFind;
+RECT crt, wrt, srt, rtMultipleMonitor;
 POINT Mouse, MaxSize, MinSize;
 HBITMAP hBitmap, hBitTemp;
 SYSTEMTIME lt;
@@ -298,6 +299,7 @@ void OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor, LPARAM dwData){
 	MONITORINFOEX mi;
 	
+	bFind = TRUE;
 	mi.cbSize = sizeof(MONITORINFOEX);
 	GetMonitorInfo(hMonitor, &mi);
 
@@ -316,7 +318,6 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor, LP
 }
 
 void OnKeyDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	static RECT rtMultipleMonitor;
 	BOOL bCtrl = (GetKeyState(VK_CONTROL) & 0x8000);
 
 	switch(wParam){
@@ -363,19 +364,36 @@ void OnKeyDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			break;
 
 		case VK_F1:
-			SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			if(bFind){
+				SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}else{
+				SetWindowPos(hWnd, NULL, 0,0, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}
 			break;
 
 		case VK_F2:
-			SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			GetWindowRect(hWnd, &wrt);
+			if(bFind){
+				SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.top, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}else{
+				SetWindowPos(hWnd, NULL, sx - (crt.right - crt.left), 0, 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}
 			break;
 
 		case VK_F3:
-			SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			if(bFind){
+				SetWindowPos(hWnd, NULL, rtMultipleMonitor.left, rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}else{
+				SetWindowPos(hWnd, NULL, 0, sy - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}
 			break;
 
 		case VK_F4:
-			SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			if(bFind){
+				SetWindowPos(hWnd, NULL, rtMultipleMonitor.right - (crt.right - crt.left), rtMultipleMonitor.bottom - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}else{
+				SetWindowPos(hWnd, NULL, sx - (crt.right - crt.left), sy - (crt.bottom - crt.top), 0,0, SWP_NOSIZE | SWP_NOZORDER);
+			}
 			break;
 
 		case 0x30:
