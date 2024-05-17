@@ -1,13 +1,13 @@
 #define UNICODE
 #define _WIN32_WINNT 0x0A00
-#include "Control.h"
+#include "resource.h"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
 #define CLASS_NAME TEXT("Minesweeper")
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
-int APIENRTY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
+int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	WNDCLASSEX wcex = {
 		sizeof(wcex),
 		CS_HREDRAW | CS_VREDRAW,
@@ -37,9 +37,10 @@ int APIENRTY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 
 	ShowWindow(hWnd, nCmdShow);
 
+	MSG msg;
 	while(GetMessage(&msg, NULL, 0,0)){
 		TranslateMessage(&msg);
-		DipsatchMessage(&msg);
+		DispatchMessage(&msg);
 	}
 
 	return (int)msg.wParam;
