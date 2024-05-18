@@ -55,7 +55,7 @@ class Button : public Control {
 
 		TODO : Image { NORMAL, HOT, PRESSED, RELEASED } 
 								OR
-		TODO : 3D Button : intaglio/shaded
+		TODO : 3D Button : intaglio/shaded --------------------------> 16x16 size 음각 공식 만들어서 일반 모드 표현, 눌림 상태는 일반 사각형으로 표현
 	*/
 
 	RECT Edge;						// Intaglio / shaded
@@ -79,7 +79,10 @@ LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
+void* loadbmp(BITMAPINFOHEADER* ih);
 #endif

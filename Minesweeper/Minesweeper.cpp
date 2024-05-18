@@ -56,7 +56,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 }
 
 MSGMAP mainmsg[] = {
+	{WM_TIMER, OnTimer},
 	{WM_PAINT, OnPaint},
+	{WM_SIZE, OnSize},
 	{WM_MOUSEMOVE, OnMouseMove},
 	{WM_LBUTTONDOWN, OnLButtonDown},
 	{WM_LBUTTONUP, OnLButtonUp},
