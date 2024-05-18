@@ -1,11 +1,26 @@
 #ifndef __RESOURCE_H_
 #define __RESOURCE_H_
 
+#define _WIN32_WINNT 0x0A00
 #include <windows.h>
+#define CLASS_NAME TEXT("Minesweeper")
+
+#define VERSION_MAJOR 1
+#define VERSION_MINOR 0
+#define VERSION_BUILD 1
+#define VERSION_PATCH 1
+
+#define STR(str) #str
+#define TOVERSION(major, minor, build, patch) STR(major.minor.build.patch)
+#define FULLVERSION TOVERSION(VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD, VERSION_PATCH)
+
+#define IDR_MENU			10001
+#define ID_EXIT				10010
+#define	ID_DESCRIPTOR		10011
+
+typedef enum {NORMAL, HOT, PRESSED, RELEASED} STATE;
 
 class Control{
-	static UINT LocalID;
-
 	UINT ID;
 	LONG x,y,Width,Height;
 	HWND hParent;
@@ -29,7 +44,7 @@ public:
 	VOID SetPosition(POINT _Position) { x = _Position.x; y = _Position.y; }
 
 public:
-	Control(LONG _x, LONG _y, LONG _Width, LONG _Height, UINT _ID = LocalID, HWND _hParent = NULL);
+	Control(LONG _x, LONG _y, LONG _Width, LONG _Height, UINT _ID, HWND _hParent = NULL);
 	virtual ~Control();
 };
 
@@ -43,9 +58,28 @@ class Button : public Control {
 		TODO : 3D Button : intaglio/shaded
 	*/
 
+	RECT Edge;						// Intaglio / shaded
+	STATE State;					// Button State
+	HBITMAP hBitmap[4];				// Image(Number, Mine, flag, ...
+	/* 이미지가 편할지도?.. */
+
 public:
-	Button();
+	Button(LONG _x, LONG _y, LONG _Width, LONG _Height, UINT _ID, HWND _hParent = NULL);
 	~Button();
-}
+};
+
+typedef struct tag_MSGMAP{
+	UINT iMessage;
+	LRESULT (*lpfnWndProc)(HWND, WPARAM, LPARAM);
+}MSGMAP;
+
+LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 #endif

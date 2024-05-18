@@ -1,13 +1,22 @@
-#define UNICODE
-#define _WIN32_WINNT 0x0A00
 #include "resource.h"
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
-#define CLASS_NAME TEXT("Minesweeper")
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
+	HANDLE hMutex;
+	hMutex = CreateMutex(NULL, FALSE, TEXT("MinesweeperToyProjectExample_01"));
+	if(GetLastError() == ERROR_ALREADY_EXISTS){
+		CloseHandle(hMutex);
+		HWND hOnce = FindWindow(NULL, CLASS_NAME);
+		if(hOnce){
+			ShowWindowAsync(hOnce, SW_SHOWNORMAL);
+			SetForegroundWindow(hOnce);
+		}
+		return 0;
+	}
+
 	WNDCLASSEX wcex = {
 		sizeof(wcex),
 		CS_HREDRAW | CS_VREDRAW,
@@ -16,7 +25,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 		hInst,
 		NULL, LoadCursor(NULL, IDC_ARROW),
 		(HBRUSH)(COLOR_WINDOW+1),
-		NULL,
+		MAKEINTRESOURCE(IDR_MENU),
 		CLASS_NAME,
 		NULL
 	};
@@ -46,35 +55,22 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	return (int)msg.wParam;
 }
 
+MSGMAP mainmsg[] = {
+	{WM_PAINT, OnPaint},
+	{WM_MOUSEMOVE, OnMouseMove},
+	{WM_LBUTTONDOWN, OnLButtonDown},
+	{WM_LBUTTONUP, OnLButtonUp},
+	{WM_RBUTTONDOWN, OnRButtonDown},
+	{WM_RBUTTONUP, OnRButtonUp},
+	{WM_CREATE, OnCreate},
+	{WM_DESTROY, OnDestroy},
+};
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
-	switch(iMessage){
-		case WM_CREATE:
-			return 0;
-
-		case WM_RBUTTONDOWN:
-			return 0;
-
-		case WM_LBUTTONDOWN:
-			return 0;
-
-		case WM_MOUSEMOVE:
-			return 0;
-
-		case WM_TIMER:
-			return 0;
-
-		case WM_PAINT:
-			{
-				PAINTSTRUCT ps;
-				HDC hdc = BeginPaint(hWnd, &ps);
-				
-				EndPaint(hWnd, &ps);
-			}
-			return 0;
-
-		case WM_DESTROY:
-			PostQuitMessage(0);
-			return 0;
+	for(DWORD_PTR i=0; i<sizeof(mainmsg)/sizeof(mainmsg[0]); i++){
+		if(mainmsg[i].iMessage == iMessage){
+			return (*mainmsg[i].lpfnWndProc)(hWnd, wParam, lParam);
+		}
 	}
 
 	return (DefWindowProc(hWnd, iMessage, wParam, lParam));
