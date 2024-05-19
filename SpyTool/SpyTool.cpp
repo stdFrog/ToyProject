@@ -1,6 +1,7 @@
 #include "resource.h"
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+LRESULT CALLBACK CaptureProc(HWND, UINT, WPARAM, LPARAM);
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	WNDCLASSEX wcex = {
@@ -15,7 +16,20 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 		CLASS_NAME,
 		NULL
 	};
+	RegisterClassEx(&wcex);
 
+	wcex = {
+		sizeof(wcex),
+		CS_HREDRAW | CS_VREDRAW,
+		CaptureProc,
+		0,0,
+		hInst,
+		NULL, LoadCursor(NULL, IDC_ARROW),
+		(HBRUSH)(COLOR_WINDOW+1),
+		NULL,
+		CHILD_CLASS_NAME,
+		NULL
+	};
 	RegisterClassEx(&wcex);
 
 	HWND hWnd = CreateWindowEx(
@@ -48,15 +62,34 @@ MSGMAP mainmsg[] = {
 	{WM_MOVE, OnMove},
 	{WM_COMMAND, OnCommand},
 	{WM_LBUTTONDOWN, OnLButtonDown},
-	{WM_RBUTTONDOWN, OnRButtonDown},
+	{WM_LBUTTONUP, OnLButtonUp},
 	{WM_CREATE, OnCreate},
 	{WM_DESTROY, OnDestroy},
+};
+
+MSGMAP submsg[] = {
+	{WM_TIMER, OnChildTimer},
+	{WM_PAINT, OnChildPaint},
+	{WM_LBUTTONDOWN, OnChildLButtonDown},
+	{WM_LBUTTONUP, OnChildLButtonUp},
+	{WM_CREATE, OnChildCreate},
+	{WM_DESTROY, OnChildDestroy},
 };
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	for(DWORD_PTR i=0; i<sizeof(mainmsg)/sizeof(mainmsg[0]); i++){
 		if(mainmsg[i].iMessage == iMessage){
 			return (*mainmsg[i].lpfnWndProc)(hWnd, wParam, lParam);
+		}
+	}
+
+	return (DefWindowProc(hWnd, iMessage, wParam, lParam));
+}
+
+LRESULT CALLBACK CaptureProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
+	for(DWORD_PTR i=0; i<sizeof(submsg)/sizeof(submsg[0]); i++){
+		if(submsg[i].iMessage == iMessage){
+			return (*submsg[i].lpfnWndProc)(hWnd, wParam, lParam);
 		}
 	}
 
