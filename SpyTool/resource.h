@@ -7,7 +7,6 @@
 #include <psapi.h>
 #include <tlhelp32.h>
 #define CLASS_NAME TEXT("SpyTool")
-#define CHILD_CLASS_NAME TEXT("CapturePopup")
 
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wunused-variable"
@@ -29,7 +28,6 @@
 
 #define	IDW_LISTBOX			20001
 #define	IDW_EDIT			20002
-#define	IDW_CAPTURE			20003
 
 typedef struct tag_MSGMAP{
 	UINT iMessage;
@@ -39,7 +37,6 @@ typedef struct tag_MSGMAP{
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
@@ -47,11 +44,7 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 LRESULT OnChildCreate(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnChildDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnChildLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnChildLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnChildPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnChildTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 BOOL CALLBACK EnumProc(HWND, LPARAM);
 BOOL CALLBACK MonitorEnumProc(HMONITOR, HDC, LPRECT, LPARAM); 
@@ -61,6 +54,8 @@ void SetChildRect(HWND, int, int, int, int);
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
 void GetInfo(TCHAR*, TCHAR*);
 void InfoFromPoint(HWND, HDC);
-int GetCurrentMonitor();
+
+void ScreenShot();
+int GetCurrentMonitor(HMONITOR);
 
 #endif

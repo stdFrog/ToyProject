@@ -18,18 +18,10 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	};
 	RegisterClassEx(&wcex);
 
-	wcex = {
-		sizeof(wcex),
-		CS_HREDRAW | CS_VREDRAW,
-		CaptureProc,
-		0,0,
-		hInst,
-		NULL, LoadCursor(NULL, IDC_ARROW),
-		(HBRUSH)(COLOR_WINDOW+1),
-		NULL,
-		CHILD_CLASS_NAME,
-		NULL
-	};
+	wcex.lpfnWndProc = CaptureProc;
+	wcex.lpszClassName = TEXT("CapturePopup");
+	wcex.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
+	wcex.lpszMenuName = NULL;
 	RegisterClassEx(&wcex);
 
 	HWND hWnd = CreateWindowEx(
@@ -62,18 +54,13 @@ MSGMAP mainmsg[] = {
 	{WM_MOVE, OnMove},
 	{WM_COMMAND, OnCommand},
 	{WM_LBUTTONDOWN, OnLButtonDown},
-	{WM_LBUTTONUP, OnLButtonUp},
 	{WM_CREATE, OnCreate},
 	{WM_DESTROY, OnDestroy},
 };
 
 MSGMAP submsg[] = {
-	{WM_TIMER, OnChildTimer},
 	{WM_PAINT, OnChildPaint},
-	{WM_LBUTTONDOWN, OnChildLButtonDown},
-	{WM_LBUTTONUP, OnChildLButtonUp},
 	{WM_CREATE, OnChildCreate},
-	{WM_DESTROY, OnChildDestroy},
 };
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){

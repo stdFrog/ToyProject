@@ -1,27 +1,48 @@
-#define DEBUG
 #include "resource.h"
+
+#define min(a,b) (((a) < (b)) ? (a) : (b))
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 
 const int WIDTH = 300;
 const int HEIGHT = 300;
 int cMonitors, nMonitor, LT;
 
+int CharHeight;
+int StretchMode;
+int SX, SY, CurrentMonitor;
+
 enum { MOUSE, IMAGE, CAPTION, CLASSNAME, LAST_COUNT };
 
-HDC g_PointDC;
+HWND g_hWnd;
 RECT g_crt, g_wrt;
 HFONT hMainFont;
-HBITMAP hMainBmp;
+HBITMAP hMainBmp, hCaptureBmp;
 
-INT CharHeight;
 TEXTMETRIC Metric;
-HWND hList, hEdit;
-BOOL bCapture;
+HWND hList, hEdit, hPopup;
 RECT *rtMultipleMonitor;
+
+OSVERSIONINFO osv;
+HMONITOR *hMonitorList, hCurrentMonitor;
 
 /* Main Procedure(MP) */
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	g_hWnd = hWnd;
+
+	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+	GetVersionEx(&osv);
+
+	if(osv.dwPlatformId >= VER_PLATFORM_WIN32_NT)
+	{
+		StretchMode = HALFTONE;
+	}else{
+		StretchMode = COLORONCOLOR;
+	}
+
+	/* 확장시 사용 */
 	cMonitors = GetSystemMetrics(SM_CMONITORS);
-	rtMultipleMonitor = (RECT*)malloc(sizeof(RECT) * cMonitors);
+	rtMultipleMonitor = (RECT*)calloc(cMonitors, sizeof(RECT));
+	hMonitorList = (HMONITOR*)calloc(cMonitors, sizeof(HMONITOR));
 	EnumDisplayMonitors(NULL, NULL, MonitorEnumProc, (LPARAM)rtMultipleMonitor);
 
 	HDC hDC = GetDC(hWnd);
@@ -34,6 +55,7 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	SetClientRect(hWnd, WIDTH, HEIGHT);
 	hList = CreateWindow(TEXT("listbox"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_CLIPSIBLINGS, 0, 0, 0, 0, hWnd, (HMENU)IDW_LISTBOX, GetModuleHandle(NULL), NULL);
 	hEdit = CreateWindow(TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL | WS_CLIPSIBLINGS, 0,0,0,0, hWnd, (HMENU)IDW_EDIT, GetModuleHandle(NULL), NULL);
+	CreateWindow(TEXT("CapturePopup"), TEXT("Capture Box"), WS_POPUP | WS_VISIBLE | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN, 0,0,0,0,HWND_DESKTOP, (HMENU)0, GetModuleHandle(NULL), NULL);
 
 	SetTimer(hWnd, 1, 10, NULL);
 	return 0;
@@ -42,8 +64,10 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	KillTimer(hWnd, 1);
 	if(hMainFont){DeleteObject(hMainFont);}
+	if(hCaptureBmp){DeleteObject(hCaptureBmp);}
 	if(hMainBmp){DeleteObject(hMainBmp);}
 	if(rtMultipleMonitor){free(rtMultipleMonitor);}
+	if(hMonitorList){free(hMonitorList);}
 	PostQuitMessage(0);
 	return 0;
 }
@@ -57,6 +81,7 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 
 	LT = LAST_COUNT * CharHeight;
+
 	GetClientRect(hWnd, &g_crt);
 	SetChildRect(hEdit, 0, LT, LOWORD(lParam), (HIWORD(lParam) - LT) / 2);
 	SetChildRect(hList, 0, (HIWORD(lParam) - LT) / 2 + GetSystemMetrics(SM_CYHSCROLL) * 4, LOWORD(lParam), (HIWORD(lParam) - LT) / 2);
@@ -73,6 +98,7 @@ LRESULT OnCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	INT i;
 	TCHAR Caption[MAX_PATH];
 	TCHAR Info[MAX_PATH];
+	TCHAR Debug[MAX_PATH];
 
 	switch(LOWORD(wParam)){
 		case IDW_LISTBOX:
@@ -91,7 +117,10 @@ LRESULT OnCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			break;
 
 		case ID_CAPTURE:
-			CreateWindow(CHILD_CLASS_NAME, NULL, WS_POPUP | WS_VISIBLE, 0, 0, 0, 0, hWnd, (HMENU)IDW_CAPTURE, GetModuleHandle(NULL), NULL);
+			if(MessageBox(hWnd, TEXT("메세지 박스가 닫히고 약 5초 후 전체 화면을 캡쳐합니다.\r\n\r\n주의 : 클립보드 영역에 비트맵을 복사합니다."), TEXT("Warning"), MB_YESNO | MB_ICONWARNING) == IDYES){
+				ShowWindow(hWnd, SW_MINIMIZE);
+				SetTimer(hWnd, 2, 5000, NULL);
+			}
 			break;
 
 		case ID_EXIT:
@@ -114,12 +143,6 @@ LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
-LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	ReleaseCapture();
-	bCapture = FALSE;
-	return 0;
-}
-
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
@@ -131,21 +154,31 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(wParam){
 		case 1:
-			HDC hdc = GetDC(hWnd);
-			HDC hMemDC = CreateCompatibleDC(hdc);
+			{
+				HDC hdc = GetDC(hWnd);
+				HDC hMemDC = CreateCompatibleDC(hdc);
 
-			if(hMainBmp == NULL){
-				GetClientRect(hWnd, &g_crt);
-				hMainBmp = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
+				if(hMainBmp == NULL){
+					GetClientRect(hWnd, &g_crt);
+					hMainBmp = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
+				}
+				HGDIOBJ hOld = SelectObject(hMemDC, hMainBmp);
+				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
+
+				InfoFromPoint(hWnd, hMemDC);
+
+				SelectObject(hMemDC, hOld);
+				DeleteDC(hMemDC);
+				ReleaseDC(hWnd, hdc);
 			}
-			HGDIOBJ hOld = SelectObject(hMemDC, hMainBmp);
-			FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
+			break;
 
-			InfoFromPoint(hWnd, hMemDC);
-
-			SelectObject(hMemDC, hOld);
-			DeleteDC(hMemDC);
-			ReleaseDC(hWnd, hdc);
+		case 2:
+			{
+				KillTimer(hWnd, 2);
+				ScreenShot();
+				ShowWindow(hWnd, SW_RESTORE);
+			}
 			break;
 	}
 
@@ -185,7 +218,7 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	BITMAP bmp;
 	GetObject(hBitmap, sizeof(BITMAP), &bmp);
 
-	BitBlt(hDC, 0,0, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+	BitBlt(hDC, X,Y, bmp.bmWidth, bmp.bmHeight, hMemDC, X,Y, SRCCOPY);
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
@@ -199,9 +232,9 @@ void InfoFromPoint(HWND hWnd, HDC hDC){
 	GetCursorPos(&pt);
 
 	HWND hWndPoint = WindowFromPoint(pt);
+	if(hWnd == hWndPoint){return;}
 	GetWindowText(hWndPoint, DisplayInfo[CAPTION], MAX_PATH);
 	GetClassName(hWndPoint, DisplayInfo[CLASSNAME], MAX_PATH);
-	g_PointDC = GetWindowDC(hWndPoint);
 
 	if(hWndPoint == hWnd){
 		ScreenToClient(hWnd, &pt);
@@ -284,6 +317,7 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor, LP
 	GetMonitorInfo(hMonitor, &mi);
 
 	if(nMonitor < cMonitors){
+		hMonitorList[nMonitor] = hMonitor;
 		(*((LPRECT)dwData + nMonitor)) = *lprcMonitor;
 		nMonitor++;
 		return TRUE;
@@ -292,39 +326,92 @@ BOOL CALLBACK MonitorEnumProc(HMONITOR hMonitor, HDC hdc, LPRECT lprcMonitor, LP
 	return FALSE;
 }
 
-/* Child Procedure(CP) */
+int GetCurrentMonitor(HMONITOR hCurrent){
+	for(int i=0; i<cMonitors; i++){
+		if(hMonitorList[i] == hCurrent){
+			return i;
+		}
+	}
+	return -1;
+}
+
+void ScreenShot(){
+	int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
+	int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
+	int vcx = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+	int vcy = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+
+	int vw = vcx - vx;
+	int vh = vcy - vy;
+
+	RECT rt;
+	GetWindowRect(GetForegroundWindow(), &rt);
+	rt.left = max(vx, rt.left);
+	rt.top = max(vy, rt.top);
+	rt.right = min(vcx, rt.right);
+	rt.bottom = min(vcy, rt.bottom);
+
+	MONITORINFOEX MonitorInfo;
+	memset(&MonitorInfo, 0, sizeof(MONITORINFOEX));
+	MonitorInfo.cbSize = sizeof(MonitorInfo);
+	HMONITOR hCurrentMonitor = MonitorFromWindow(g_hWnd, MONITOR_DEFAULTTONEAREST);
+	GetMonitorInfo(hCurrentMonitor, &MonitorInfo);
+
+	HDC hScrDC = GetDC(NULL);
+	HDC hWndDC = GetDC(hPopup);
+	HDC hMemDC = CreateCompatibleDC(hWndDC);
+
+	RECT crt = MonitorInfo.rcMonitor;
+	SetWindowPos(hPopup, NULL, crt.left, crt.top, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
+
+	HDC hClipDC = CreateCompatibleDC(hScrDC);
+	HBITMAP hClipBmp = CreateCompatibleBitmap(hScrDC, vw, vh);
+	HGDIOBJ hOld = SelectObject(hClipDC, hClipBmp);
+	BitBlt(hClipDC, 0,0, vcx, vcy, hScrDC, vx, vy, SRCCOPY);
+
+	OpenClipboard(NULL);
+	EmptyClipboard();
+	SetClipboardData(CF_BITMAP, hClipBmp);
+	CloseClipboard();   
+
+	SelectObject(hClipDC, hOld);
+	DeleteDC(hClipDC);
+	DeleteObject(hClipBmp);
+
+	SetStretchBltMode(hWndDC, StretchMode);
+	StretchBlt(hWndDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hScrDC, rt.left, rt.top, rt.right - rt.left, rt.bottom - rt.top, SRCCOPY);
+
+	HBITMAP hBitmap = CreateCompatibleBitmap(hWndDC, crt.right - crt.left, crt.bottom - crt.top);
+	hOld = SelectObject(hMemDC, hBitmap);
+
+	BitBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hWndDC, 0,0 , SRCCOPY);
+
+	SelectObject(hMemDC, hOld);
+	DeleteDC(hMemDC);
+	ReleaseDC(hPopup, hWndDC);
+	ReleaseDC(NULL, hScrDC);
+	DeleteObject(hBitmap);
+}
+
 LRESULT OnChildCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	int CurrentMonitor = GetCurrentMonitor();
-	HDC hdc = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+	hPopup = hWnd;
 
-	return 0;
-}
-
-LRESULT OnChildDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	PostQuitMessage(0);
-	return 0;
-}
-
-LRESULT OnChildLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
-	return 0;
-}
-
-LRESULT OnChildLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
+	if(IsClipboardFormatAvailable(CF_BITMAP)){
+		if(OpenClipboard(NULL)){
+			hCaptureBmp = (HBITMAP)GetClipboardData(CF_BITMAP);
+			CloseClipboard();
+		}
+	}
+	
 	return 0;
 }
 
 LRESULT OnChildPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
-	return 0;
-}
-
-LRESULT OnChildTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
-	return 0;
-}
-
-int GetCurrentMonitor(){
+	PAINTSTRUCT ps;
+	HDC hDC = BeginPaint(hWnd, &ps);
+	if(hCaptureBmp){
+		DrawBitmap(hDC, 0,0, hCaptureBmp);
+	}
+	EndPaint(hWnd, &ps);
 	return 0;
 }
