@@ -237,6 +237,8 @@ void InfoFromPoint(HWND hWnd, HDC hDC){
 
 	if(hWndPoint == hWnd){
 		ScreenToClient(hWnd, &pt);
+	}else if(hWndPoint == hPopup){
+		ScreenToClient(hPopup, &pt);
 	}
 
 	Color = GetPixel(GetDC(hWndPoint), pt.x, pt.y);
@@ -385,6 +387,7 @@ void ScreenShot(){
 	DeleteDC(hClipDC);
 	DeleteObject(hClipBmp);
 	*/
+
 	RECT crt;
 	GetClientRect(hPopup, &crt);
 	SetStretchBltMode(hWndDC, StretchMode);
