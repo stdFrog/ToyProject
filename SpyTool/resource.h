@@ -58,4 +58,6 @@ void InfoFromPoint(HWND, HDC);
 void ScreenShot();
 int GetCurrentMonitor(HMONITOR);
 
+void GetRealDpi(HMONITOR, float*, float*);
+
 #endif

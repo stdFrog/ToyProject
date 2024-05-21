@@ -39,7 +39,6 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 		StretchMode = COLORONCOLOR;
 	}
 
-	/* 확장시 사용 */
 	cMonitors = GetSystemMetrics(SM_CMONITORS);
 	rtMultipleMonitor = (RECT*)calloc(cMonitors, sizeof(RECT));
 	hMonitorList = (HMONITOR*)calloc(cMonitors, sizeof(HMONITOR));
@@ -55,7 +54,6 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	SetClientRect(hWnd, WIDTH, HEIGHT);
 	hList = CreateWindow(TEXT("listbox"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | WS_VSCROLL | LBS_NOTIFY | WS_CLIPSIBLINGS, 0, 0, 0, 0, hWnd, (HMENU)IDW_LISTBOX, GetModuleHandle(NULL), NULL);
 	hEdit = CreateWindow(TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_MULTILINE | ES_AUTOHSCROLL | WS_VSCROLL | WS_HSCROLL | WS_CLIPSIBLINGS, 0,0,0,0, hWnd, (HMENU)IDW_EDIT, GetModuleHandle(NULL), NULL);
-	CreateWindow(TEXT("CapturePopup"), TEXT("Capture Box"), WS_POPUP | WS_VISIBLE | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN, 0,0,0,0,HWND_DESKTOP, (HMENU)0, GetModuleHandle(NULL), NULL);
 
 	SetTimer(hWnd, 1, 10, NULL);
 	return 0;
@@ -117,7 +115,7 @@ LRESULT OnCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			break;
 
 		case ID_CAPTURE:
-			if(MessageBox(hWnd, TEXT("메세지 박스가 닫히고 약 5초 후 전체 화면을 캡쳐합니다.\r\n\r\n주의 : 클립보드 영역에 비트맵을 복사합니다."), TEXT("Warning"), MB_YESNO | MB_ICONWARNING) == IDYES){
+			if(MessageBox(hWnd, TEXT("메세지 박스가 닫히고 약 5초 후 전체 화면을 캡쳐합니다.\r\n\r\n메세지 박스가 닫힌 후 캡쳐하고자 하는 창을 클릭(활성화)하세요.\r\n\r\n주의 : 클립보드 영역에 비트맵을 복사합니다."), TEXT("Warning"), MB_YESNO | MB_ICONWARNING) == IDYES){
 				ShowWindow(hWnd, SW_MINIMIZE);
 				SetTimer(hWnd, 2, 5000, NULL);
 			}
@@ -176,6 +174,7 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 		case 2:
 			{
 				KillTimer(hWnd, 2);
+				CreateWindow(TEXT("CapturePopup"), TEXT("Capture Box"), WS_POPUP | WS_VISIBLE | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN, 0,0,0,0,HWND_DESKTOP, (HMENU)0, GetModuleHandle(NULL), NULL);
 				ScreenShot();
 				ShowWindow(hWnd, SW_RESTORE);
 			}
@@ -344,30 +343,38 @@ void ScreenShot(){
 	int vw = vcx - vx;
 	int vh = vcy - vy;
 
-	RECT rt;
-	GetWindowRect(GetForegroundWindow(), &rt);
-	rt.left = max(vx, rt.left);
-	rt.top = max(vy, rt.top);
-	rt.right = min(vcx, rt.right);
-	rt.bottom = min(vcy, rt.bottom);
-
 	MONITORINFOEX MonitorInfo;
 	memset(&MonitorInfo, 0, sizeof(MONITORINFOEX));
 	MonitorInfo.cbSize = sizeof(MonitorInfo);
 	HMONITOR hCurrentMonitor = MonitorFromWindow(g_hWnd, MONITOR_DEFAULTTONEAREST);
+
+	float XScale, YScale;
 	GetMonitorInfo(hCurrentMonitor, &MonitorInfo);
+	GetRealDpi(hCurrentMonitor, &XScale, &YScale);
+
+	RECT wrt;
+	wrt.left = max(MonitorInfo.rcMonitor.left, vx);
+	wrt.top = max(MonitorInfo.rcMonitor.top, vy);
+	wrt.right = min(MonitorInfo.rcMonitor.right, vcx);
+	wrt.bottom = min(MonitorInfo.rcMonitor.bottom, vcx);
+	SetWindowPos(hPopup, NULL, wrt.left, wrt.top, wrt.right - wrt.left, wrt.bottom - wrt.top, SWP_NOZORDER);
+
+	RECT trt;
+	HWND hTargetWnd = GetForegroundWindow();
+	GetWindowRect(hTargetWnd, &trt);
 
 	HDC hScrDC = GetDC(NULL);
 	HDC hWndDC = GetDC(hPopup);
 	HDC hMemDC = CreateCompatibleDC(hWndDC);
 
-	RECT crt = MonitorInfo.rcMonitor;
-	SetWindowPos(hPopup, NULL, crt.left, crt.top, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
+	/*
+	// 전체 화면 조정없이 복사
 
 	HDC hClipDC = CreateCompatibleDC(hScrDC);
+
 	HBITMAP hClipBmp = CreateCompatibleBitmap(hScrDC, vw, vh);
 	HGDIOBJ hOld = SelectObject(hClipDC, hClipBmp);
-	BitBlt(hClipDC, 0,0, vcx, vcy, hScrDC, vx, vy, SRCCOPY);
+	BitBlt(hClipDC, 0,0, vw, vh, hScrDC, vx, vy, SRCCOPY);
 
 	OpenClipboard(NULL);
 	EmptyClipboard();
@@ -377,20 +384,28 @@ void ScreenShot(){
 	SelectObject(hClipDC, hOld);
 	DeleteDC(hClipDC);
 	DeleteObject(hClipBmp);
-
+	*/
+	RECT crt;
+	GetClientRect(hPopup, &crt);
 	SetStretchBltMode(hWndDC, StretchMode);
-	StretchBlt(hWndDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hScrDC, rt.left, rt.top, rt.right - rt.left, rt.bottom - rt.top, SRCCOPY);
+	StretchBlt(hWndDC, 0, 0, crt.right - crt.left, crt.bottom - crt.top, hScrDC, wrt.left, wrt.top, (wrt.right - wrt.left) * XScale, (wrt.bottom - wrt.top) * YScale, SRCCOPY);
 
 	HBITMAP hBitmap = CreateCompatibleBitmap(hWndDC, crt.right - crt.left, crt.bottom - crt.top);
-	hOld = SelectObject(hMemDC, hBitmap);
+	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
 
 	BitBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hWndDC, 0,0 , SRCCOPY);
+
+	OpenClipboard(NULL);
+	EmptyClipboard();
+	SetClipboardData(CF_BITMAP, hBitmap);
+	CloseClipboard();   
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
 	ReleaseDC(hPopup, hWndDC);
 	ReleaseDC(NULL, hScrDC);
 	DeleteObject(hBitmap);
+
 }
 
 LRESULT OnChildCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
@@ -414,4 +429,18 @@ LRESULT OnChildPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 	EndPaint(hWnd, &ps);
 	return 0;
+}
+
+void GetRealDpi(HMONITOR hMonitor, float *XScale, float *YScale) {
+	MONITORINFOEX Info = { sizeof(MONITORINFOEX) };
+	GetMonitorInfo(hMonitor, &Info);
+
+	DEVMODE DevMode = {.dmSize = sizeof(DEVMODE) };
+	EnumDisplaySettings(Info.szDevice, ENUM_CURRENT_SETTINGS, &DevMode);
+
+	RECT rt = Info.rcMonitor;
+
+	float CurrentDpi = GetDpiForSystem() / USER_DEFAULT_SCREEN_DPI;
+	*XScale = CurrentDpi / ((rt.right - rt.left) / (float)DevMode.dmPelsWidth);
+	*YScale = CurrentDpi / ((rt.bottom - rt.top) / (float)DevMode.dmPelsHeight);
 }
