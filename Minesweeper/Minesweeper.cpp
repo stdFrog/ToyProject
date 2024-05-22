@@ -1,6 +1,4 @@
 #include "resource.h"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#pragma GCC diagnostic ignored "-Wunused-variable"
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
@@ -25,7 +23,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 		hInst,
 		NULL, LoadCursor(NULL, IDC_ARROW),
 		(HBRUSH)(COLOR_WINDOW+1),
-		MAKEINTRESOURCE(IDR_MENU),
+		NULL,
 		CLASS_NAME,
 		NULL
 	};
@@ -59,6 +57,7 @@ MSGMAP mainmsg[] = {
 	{WM_TIMER, OnTimer},
 	{WM_PAINT, OnPaint},
 	{WM_SIZE, OnSize},
+	{WM_SYSCOMMAND, OnSysCommand},
 	{WM_MOUSEMOVE, OnMouseMove},
 	{WM_LBUTTONDOWN, OnLButtonDown},
 	{WM_LBUTTONUP, OnLButtonUp},

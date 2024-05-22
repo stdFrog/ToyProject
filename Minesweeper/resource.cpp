@@ -2,48 +2,17 @@
 #define DEBUG
 #include "resource.h"
 
-RECT crt;
-HPEN hWhitePen, hNullPen;
-HBRUSH hBkBrush, hGrayBrush;
-HBITMAP hClientBitmap, hOriginImage;
+RECT g_crt, g_wrt;
+HBITMAP hClientBitmap;
 
-HDC hOriginImageDC;
 BYTE* pData = NULL;
 BITMAPINFOHEADER sih;
+BITMAPINFOHEADER ih;
 
 int StretchMode;
 OSVERSIONINFO osv;
 
-Control::Control(LONG _x, LONG _y, LONG _Width, LONG _Height, UINT _ID, HWND _hParent)
-	: x(_x), y(_y), Width(_Width), Height(_Height), ID(_ID), hParent(_hParent)
-{
-	
-}
-
-Control::~Control(){
-
-}
-
-Button::Button(LONG _x, LONG _y, LONG _Width, LONG _Height, UINT _ID, HWND _hParent) : Control(_x, _y, _Width, _Height, _ID, _hParent)
-{
-	Edge = {};
-	State = NORMAL;
-
-	for(int i=0; i<4; i++){
-		hBitmap[i] = NULL;
-	}
-}
-
-Button::~Button(){
-	
-}
-
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	hBkBrush = CreateSolidBrush(GetSysColor(COLOR_BTNFACE));
-	hGrayBrush = CreateSolidBrush(RGB(190, 190, 190));
-	hWhitePen = CreatePen(PS_SOLID, 2, RGB(235,235,235));
-	hNullPen = (HPEN)GetStockObject(NULL_PEN);
-
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx(&osv);
 
@@ -54,6 +23,14 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 		StretchMode = COLORONCOLOR;
 	}
 
+	HMENU hSysMenu = GetSystemMenu(hWnd, FALSE);
+	AppendMenu(hSysMenu, MF_SEPARATOR, 0, TEXT("프로그램 소개"));
+	AppendMenu(hSysMenu, MF_STRING, ID_SYS_ABOUT, TEXT("프로그램 소개"));
+
+	HMENU hPopup = CreatePopupMenu();
+	AppendMenu(hSysMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopup, TEXT("설정"));
+	AppendMenu(hPopup, MF_STRING, 40001, TEXT("새 게임"));
+	AppendMenu(hPopup, MF_STRING, 40002, TEXT("크기 변경"));
 
 	SetTimer(hWnd, 1, 10, NULL);
 	SendMessage(hWnd, WM_TIMER, 1, 0);
@@ -62,34 +39,13 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	KillTimer(hWnd, 1);
-	if(hBkBrush){ DeleteObject(hBkBrush); }
-	if(hGrayBrush){DeleteObject(hGrayBrush);}
-	if(hWhitePen){DeleteObject(hWhitePen);}
-	if(hNullPen){DeleteObject(hNullPen);}
 	if(hClientBitmap){DeleteObject(hClientBitmap);}
-	if(hOriginImage){DeleteObject(hClientBitmap);}
 	if(pData){free(pData);}
-	if(hOriginImageDC){ DeleteDC(hOriginImageDC); }
 	PostQuitMessage(0);
 	return 0;
 }
 
-BITMAPINFOHEADER ih;
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
-	#ifdef DEBUG
-	pData = (BYTE*)loadbmp(&sih);
-
-	if(pData != NULL) {
-		HDC hdc = GetDC(hWnd);
-		hOriginImageDC = CreateCompatibleDC(hdc);
-		hOriginImage = CreateCompatibleBitmap(hdc, sih.biWidth, sih.biHeight);
-		HGDIOBJ hOld = SelectObject(hOriginImageDC, hOriginImage);
-		SetDIBitsToDevice(hOriginImageDC, 0,0, sih.biWidth, sih.biHeight, 0,0,0, sih.biHeight, pData, (BITMAPINFO*)&sih, DIB_RGB_COLORS);
-		DeleteObject(hOld);
-		ReleaseDC(hWnd, hdc);
-	}
-	#endif
 
 	return 0;
 }
@@ -114,6 +70,28 @@ LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	switch(LOWORD(wParam)){
+		case ID_SYS_ABOUT:
+			MessageBox(hWnd, TEXT("이 프로그램은 과거 지뢰찾기 게임을 모작한 것입니다.\r\n윈도우의 제목을 우클릭하면 게임 설정과 관련된 메뉴가 있습니다.\r\n"), TEXT("프로그램 소개"), MB_OK);
+			return 0;
+
+		case ID_SYS_NEWGAME:
+			return 0;
+
+		case ID_SYS_RESIZE:
+			return 0;
+
+		case ID_SYS_EXIT:
+			return 0;
+
+		default:
+			break;
+	}
+
+	return DefWindowProc(hWnd, WM_SYSCOMMAND, wParam, lParam);
+}
+
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	if(wParam != SIZE_MINIMIZED) {
 		if(hClientBitmap) {
@@ -128,26 +106,13 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 	if(hClientBitmap){
-		HDC hMemDC = CreateCompatibleDC(hdc);
-		HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
-
-		BITMAP bmp;
-		GetObject(hClientBitmap, sizeof(BITMAP), &bmp);
-
-		BitBlt(hdc, 0,0, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
-
-		SelectObject(hMemDC, hOld);
-		DeleteDC(hMemDC);
+		DrawBitmap(hdc, 0,0, hClientBitmap);
 	}
 	EndPaint(hWnd, &ps);
 	return 0;
 }
 
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	static HWND hWndPoint;
-	static TCHAR Caption[MAX_PATH], ClassName[MAX_PATH];
-	static COLORREF Color;
-
 	switch(wParam){
 		case 1:
 			{
@@ -155,54 +120,17 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 				HDC hMemDC = CreateCompatibleDC(hDC);
 
 				if(hClientBitmap == NULL){
-					GetClientRect(hWnd, &crt);
-					hClientBitmap = CreateCompatibleBitmap(hDC, crt.right, crt.bottom);
+					GetClientRect(hWnd, &g_crt);
+					hClientBitmap = CreateCompatibleBitmap(hDC, g_crt.right, g_crt.bottom);
 				}
 
 				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
-				FillRect(hMemDC, &crt, hBkBrush);
+				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW+1));
 
-				POINT pt;
-				GetCursorPos(&pt);
+				/* TODO : */
+				{
 
-				SetBkMode(hMemDC, TRANSPARENT);
-				SetStretchBltMode(hMemDC, StretchMode);
-
-				#ifdef DEBUG
-				if(hOriginImage != NULL){
-					StretchBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hOriginImageDC, 0,0, sih.biWidth, sih.biHeight, SRCCOPY);
 				}
-
-				hWndPoint = WindowFromPoint(pt);
-				GetWindowText(hWndPoint, Caption, MAX_PATH);
-				GetClassName(hWndPoint, ClassName, MAX_PATH);
-				TextOut(hMemDC, crt.right - lstrlen(Caption) * 10, crt.top + 16, Caption, lstrlen(Caption));
-				TextOut(hMemDC, crt.right - lstrlen(ClassName) * 10, crt.top + 32, ClassName, lstrlen(ClassName));
-				if(hWndPoint == hWnd){
-					ScreenToClient(hWnd, &pt);
-				}
-				Color = GetPixel(GetDC(hWndPoint), pt.x, pt.y);
-				#else
-				ScreenToClient(hWnd, &pt);
-				Color = GetPixel(hDC, pt.x, pt.y);
-				#endif
-
-				INT R = (BYTE)(Color);
-				INT G = ((BYTE)(((WORD)(Color)) >> 8));
-				INT B = ((BYTE)((Color)>>16));
-
-				TCHAR Cursor[MAX_PATH];
-				wsprintf(Cursor, TEXT("Cursor Pos(%d, %d), Color = (R: %d, G: %d, B: %d)"), pt.x, pt.y, R,G,B);
-				TextOut(hMemDC, crt.right - lstrlen(Cursor) * 10, crt.top + 48, Cursor, lstrlen(Cursor));
-
-				HPEN hOldPen = (HPEN)SelectObject(hMemDC, hWhitePen);
-				Rectangle(hMemDC, 10-1, 10-1, 26, 26);
-				SelectObject(hMemDC, hOldPen);
-				hOldPen = (HPEN)SelectObject(hMemDC, hNullPen);
-				HBRUSH hOldBrush = (HBRUSH)SelectObject(hMemDC, hGrayBrush);
-				Rectangle(hMemDC, 10, 10, 26, 26);
-				SelectObject(hMemDC, hOldPen);
-				SelectObject(hMemDC, hOldBrush);
 
 				SelectObject(hMemDC, hOld);
 				DeleteDC(hMemDC);
@@ -215,8 +143,7 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
-void* loadbmp(BITMAPINFOHEADER* ih)
-{
+void* loadbmp(BITMAPINFOHEADER* ih){
 	void *buf = NULL;
 	TCHAR lpstrFile[MAX_PATH] = TEXT("");
 	TCHAR FileName[MAX_PATH];
@@ -252,7 +179,7 @@ void* loadbmp(BITMAPINFOHEADER* ih)
 				{
 					if(ih->biSizeImage == 0)
 					{
-						ih->biSizeImage = (((ih->biBitCount * ih->biWidth + 31) & ~31) >> 3) * ih->biHeight;
+						ih->biSizeImage = (((ih->biBitCount * ih->biWidth + 31) / 32) * 4 * ih->biHeight);
 					}
 
 					buf = malloc(ih->biSizeImage);
@@ -277,4 +204,23 @@ void* loadbmp(BITMAPINFOHEADER* ih)
 	}
 
 	return NULL;
+}
+
+void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
+	if(hBitmap == NULL){return;}
+
+	HDC hMemDC = CreateCompatibleDC(hDC);
+	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
+
+	BITMAP bmp;
+	GetObject(hBitmap, sizeof(BITMAP), &bmp);
+
+	BitBlt(hDC, X,Y, bmp.bmWidth, bmp.bmHeight, hMemDC, X,Y, SRCCOPY);
+
+	SelectObject(hMemDC, hOld);
+	DeleteDC(hMemDC);
+}
+
+void SetMapSize(){
+	/* 대화상자를 생성하여 화면 설정을 마칩니다. */
 }
