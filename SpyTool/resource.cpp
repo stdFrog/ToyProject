@@ -116,7 +116,9 @@ LRESULT OnCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 		case ID_CAPTURE:
 			if(MessageBox(hWnd, TEXT("메세지 박스가 닫히고 약 5초 후 전체 화면을 캡쳐합니다.\r\n\r\n메세지 박스가 닫힌 후 캡쳐하고자 하는 창을 클릭(활성화)하세요.\r\n\r\n주의 : 클립보드 영역에 비트맵을 복사합니다."), TEXT("Warning"), MB_YESNO | MB_ICONWARNING) == IDYES){
+
 				ShowWindow(hWnd, SW_MINIMIZE);
+				CreateWindow(TEXT("CapturePopup"), TEXT("Capture Box"), WS_POPUP | WS_VISIBLE | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN, 0,0,0,0,HWND_DESKTOP, (HMENU)0, GetModuleHandle(NULL), NULL);
 				SetTimer(hWnd, 2, 5000, NULL);
 			}
 			break;
@@ -174,9 +176,9 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 		case 2:
 			{
 				KillTimer(hWnd, 2);
-				CreateWindow(TEXT("CapturePopup"), TEXT("Capture Box"), WS_POPUP | WS_VISIBLE | WS_BORDER | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN, 0,0,0,0,HWND_DESKTOP, (HMENU)0, GetModuleHandle(NULL), NULL);
 				ScreenShot();
 				ShowWindow(hWnd, SW_RESTORE);
+				ShowWindow(hPopup, SW_RESTORE);
 			}
 			break;
 	}
@@ -420,6 +422,8 @@ LRESULT OnChildCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			CloseClipboard();
 		}
 	}
+
+	SetActiveWindow(g_hWnd);
 	
 	return 0;
 }

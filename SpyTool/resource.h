@@ -14,8 +14,8 @@
 
 #define VERSION_MAJOR 1
 #define VERSION_MINOR 0
-#define VERSION_BUILD 1
-#define VERSION_PATCH 1
+#define VERSION_BUILD 23
+#define VERSION_PATCH 5
 
 #define STR(str) #str
 #define TOVERSION(major, minor, build, patch) STR(major.minor.build.patch)
