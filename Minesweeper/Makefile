@@ -1,7 +1,7 @@
 CC = g++
 
 MAIN = Minesweeper
-OBJS = resource.o
+OBJS = resource.o Button.o
 RCRS = $(OBJS : .o=.cpp)
 
 TARGET = $(MAIN)
@@ -15,7 +15,7 @@ $(RES) : resource.h $(MAIN).rc
 	windres $(MAIN).rc -O Coff -o $(RES)
 
 $(TARGET) : $(MAIN).cpp $(OBJS) $(RES)
-	$(CC) $(CFLAGS) -o $@ $^ $(OPT)
+	$(CC) $(CFLAGS) -o $@ $^ $(OPT) -lcomctl32
 
 clean:
 	del *.res

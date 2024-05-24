@@ -1,6 +1,9 @@
 #define UNICODE
 #define DEBUG
 #include "resource.h"
+#include "Button.h"
+#include <commctrl.h>
+#pragma comment(lib, "comctl32")
 
 RECT g_crt, g_wrt;
 HBITMAP hClientBitmap;
@@ -11,6 +14,12 @@ BITMAPINFOHEADER ih;
 
 int StretchMode;
 OSVERSIONINFO osv;
+
+HWND hStatusWnd;
+
+const int TILE_WIDTH = 16;
+const int TILE_HEIGHT = 16;
+int MAPSIZE = 25;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -24,13 +33,18 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 
 	HMENU hSysMenu = GetSystemMenu(hWnd, FALSE);
-	AppendMenu(hSysMenu, MF_SEPARATOR, 0, TEXT("프로그램 소개"));
+	AppendMenu(hSysMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hSysMenu, MF_STRING, ID_SYS_ABOUT, TEXT("프로그램 소개"));
 
 	HMENU hPopup = CreatePopupMenu();
 	AppendMenu(hSysMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopup, TEXT("설정"));
 	AppendMenu(hPopup, MF_STRING, 40001, TEXT("새 게임"));
 	AppendMenu(hPopup, MF_STRING, 40002, TEXT("크기 변경"));
+
+	InitCommonControls();
+	hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
+
+	SetClientRect(hWnd, TILE_WIDTH * MAPSIZE, TILE_HEIGHT * MAPSIZE);
 
 	SetTimer(hWnd, 1, 10, NULL);
 	SendMessage(hWnd, WM_TIMER, 1, 0);
@@ -73,7 +87,7 @@ LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(LOWORD(wParam)){
 		case ID_SYS_ABOUT:
-			MessageBox(hWnd, TEXT("이 프로그램은 과거 지뢰찾기 게임을 모작한 것입니다.\r\n윈도우의 제목을 우클릭하면 게임 설정과 관련된 메뉴가 있습니다.\r\n"), TEXT("프로그램 소개"), MB_OK);
+			MessageBox(hWnd, TEXT("이 프로그램은 고전 게임 '지뢰찾기'를 모작한 것이며 마우스 조작을 통해 게임을 진행하실 수 있습니다.\r\n\r\n시스템적 변화는 일절 없으며 시스템 메뉴에서 게임 옵션을 조정할 수 있습니다.\r\n\r\n"), TEXT("프로그램 소개"), MB_OK);
 			return 0;
 
 		case ID_SYS_NEWGAME:
@@ -86,18 +100,24 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			return 0;
 
 		default:
-			break;
+			return DefWindowProc(hWnd, WM_SYSCOMMAND, wParam, lParam);
 	}
-
-	return DefWindowProc(hWnd, WM_SYSCOMMAND, wParam, lParam);
 }
 
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	INT Part[3];
+
 	if(wParam != SIZE_MINIMIZED) {
 		if(hClientBitmap) {
 			DeleteObject(hClientBitmap);
 			hClientBitmap = NULL;
 		}
+
+		SendMessage(hStatusWnd, WM_SIZE, wParam, lParam);
+		for(int i=0; i<3; i++){
+			Part[i] = LOWORD(lParam) / 3 * (i + 1);
+		}
+		SendMessage(hStatusWnd, SB_SETPARTS, 3, (LPARAM)Part);
 	}
 	return 0;
 }
@@ -116,34 +136,14 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(wParam){
 		case 1:
 			{
-				HDC hDC = GetDC(hWnd);
-				HDC hMemDC = CreateCompatibleDC(hDC);
 
-				if(hClientBitmap == NULL){
-					GetClientRect(hWnd, &g_crt);
-					hClientBitmap = CreateCompatibleBitmap(hDC, g_crt.right, g_crt.bottom);
-				}
-
-				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
-				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW+1));
-
-				/* TODO : */
-				{
-
-				}
-
-				SelectObject(hMemDC, hOld);
-				DeleteDC(hMemDC);
-				ReleaseDC(hWnd, hDC);
 			}
 			break;
 	}
-
-	InvalidateRect(hWnd, NULL, FALSE);
 	return 0;
 }
 
-void* loadbmp(BITMAPINFOHEADER* ih){
+void* LoadBmp(BITMAPINFOHEADER* ih){
 	void *buf = NULL;
 	TCHAR lpstrFile[MAX_PATH] = TEXT("");
 	TCHAR FileName[MAX_PATH];
@@ -224,3 +224,20 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 void SetMapSize(){
 	/* 대화상자를 생성하여 화면 설정을 마칩니다. */
 }
+
+void SetClientRect(HWND hWnd, int Width, int Height){
+	RECT crt;
+	DWORD Style, ExStyle;
+
+	SetRect(&crt, 0,0, Width, Height);
+	Style = GetWindowLong(hWnd, GWL_STYLE);
+	ExStyle = GetWindowLong(hWnd, GWL_EXSTYLE);
+
+	AdjustWindowRectEx(&crt, Style, GetMenu(hWnd) != NULL, ExStyle);
+	if(Style & WS_VSCROLL){crt.right += GetSystemMetrics(SM_CXVSCROLL);}
+	if(Style & WS_HSCROLL){crt.bottom += GetSystemMetrics(SM_CYHSCROLL);}
+
+	SetWindowPos(hWnd, NULL, 0,0, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
+}
+
+

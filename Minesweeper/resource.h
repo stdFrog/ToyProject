@@ -23,6 +23,8 @@
 #define ID_SYS_RESIZE	40002
 #define ID_SYS_EXIT		40003
 
+#define IDW_STATUS		10000
+
 typedef struct tag_MSGMAP{
 	UINT iMessage;
 	LRESULT (*lpfnWndProc)(HWND, WPARAM, LPARAM);
@@ -40,8 +42,9 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
-void* loadbmp(BITMAPINFOHEADER*);
+void* LoadBmp(BITMAPINFOHEADER*);
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
-
+void SetClientRect(HWND hWnd, int Width, int Height);
 void SetMapSize();
+
 #endif
