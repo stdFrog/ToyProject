@@ -15,35 +15,95 @@ void Button::OnPaint(HDC hDC){
 }
 
 void Button::OnTimer(){
-	
+	if(_bTimer == FALSE){return;}
+
+	POINT pt;
+	GetCursorPos(&pt);
+
+	ScreenToClient(_hParent, &pt);
+	if(IsPtOnMe(pt) == FALSE){
+		KillTimer(_hParent, 0x400);
+		_bTimer = FALSE;
+		ChangeState(NORMAL);
+	}
 }
 
 void Button::OnMove(LPARAM lParam){
+	if(_State == HIDDEN || _State == DISABLE){return;}
 
+	int x = (int)(short)LOWORD(lParam);
+	int y = (int)(short)HIWORD(lParam);
+	
+	if(_bCapture){
+		if((_Style & CHECKBUTTON) == 0){
+			if(IsPtOnMe(x,y)){
+				ChangeState(PRESSED);
+			}else{
+				ChangeState(NORMAL);
+			}
+		}else{
+			if(IsPtOnMe(x,y)){
+				ChangeState((_State == NORMAL) ? PRESSED : NORMAL);
+			}else{
+				ChangeState(_State);
+			}
+		}
+	}else{
+		for(HWND hParent = _hParent; GetParent(hParent); hParent = GetParent(hParent)){;}
+		if(GetForegroundWindow() != _hParent){return;}
+
+		if(GetCapture() == NULL && (_Style & CHECKBUTTON) == 0 && IsPtOnMe(x,y)){
+			SetTimer(_hParent, 0x400, 50, NULL);
+			_bTimer = TRUE;
+			ChangeState(HOT);
+		}
+	}
 }
 
 void Button::OnPressed(LPARAM lParam){
 	if(_State == HIDDEN || _State == DISABLE){return;}
 
 	if(IsPtOnMe(LOWORD(lParam), HIWORD(lParam))){
-		if(!(_Style & CHECKBUTTON)){
-
+		if((_Style & CHECKBUTTON) == 0){
+			ChangeState(PRESSED);
 		}
 	}else{
-		
+		ChangeState((_State == NORMAL) ? PRESSED : NORMAL);
 	}
+
+	SetCapture(_hParent);
+	_bCapture = TRUE;
 }
 
 void Button::OnReleased(LPARAM lParam){
+	if(_bCapture){
+		ReleaseCapture();
+		_bCapture = FALSE;
 
+		if((_Style & CHECKBUTTON) == 0){
+			ChangeState(NORMAL);
+		}
+
+		POINT pt;
+		GetCursorPos(&pt);
+		ScreenToClient(_hParent, &pt);
+
+		if(IsPtOnMe(pt)){
+			/* TODO : State에 따른 이미지 변경 */
+		}
+	}
+}
+
+void Button::ChangeState(STATE NewState){
+	if(_State == NewState) {return;}
+
+	_State = NewState;
+	DrawBitmap(NULL);
 }
 
 void Button::SetState(STATE NewState){
-	if(_State == NewState) {return;}
-
-	if(_Style & CHECKBUTTON){
-		_State = NewState;
-		DrawBitmap(NULL);
+	if((_Style & CHECKBUTTON) != 0){
+		ChangeState(NewState);
 	}
 }
 
@@ -80,3 +140,4 @@ void Button::DrawBitmap(HDC hDC){
 
 	if(ParentDC){ ReleaseDC(_hParent, hDC); }
 }
+

@@ -5,7 +5,7 @@
 #include <commctrl.h>
 #pragma comment(lib, "comctl32")
 
-RECT g_crt, g_wrt;
+RECT g_crt, g_wrt, g_swrt;
 HBITMAP hClientBitmap;
 
 BYTE* pData = NULL;
@@ -17,9 +17,16 @@ OSVERSIONINFO osv;
 
 HWND hStatusWnd;
 
+typedef enum {GAME_STOP, GAME_BEGIN, GAME_PAUSE, GAME_OVER} GAME_STATE;
+
 const int TILE_WIDTH = 16;
 const int TILE_HEIGHT = 16;
-int MAPSIZE = 25;
+int MAP_WIDTH = 25;
+int MAP_HEIGHT = 25;
+int BOMB_COUNT = 10;
+
+GAME_STATE g_GameState = GAME_STOP;
+int g_Time;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -44,9 +51,14 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	InitCommonControls();
 	hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
 
-	SetClientRect(hWnd, TILE_WIDTH * MAPSIZE, TILE_HEIGHT * MAPSIZE);
+	SetClientRect(hWnd, TILE_WIDTH * MAP_WIDTH, TILE_HEIGHT * MAP_HEIGHT);
 
-	SetTimer(hWnd, 1, 10, NULL);
+	g_GameState = GAME_BEGIN;
+	g_Time = 0;
+
+	SetTimer(hWnd, 1, 1000, NULL);
+	SetTimer(hWnd, 2, 50, NULL);
+
 	SendMessage(hWnd, WM_TIMER, 1, 0);
 	return 0;
 }
@@ -133,13 +145,28 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	RECT clip;
+
 	switch(wParam){
 		case 1:
 			{
+				if(g_GameState = GAME_BEGIN){
+					g_Time++;
+				}
 
 			}
 			break;
+
+		case 2:
+			{
+				SetStatusText(hWnd);
+			}
+
+			SendMessage(hStatusWnd, SB_GETRECT, 2, (LPARAM)&clip);
+			InvalidateRect(hWnd, &clip, FALSE);
+			break;
 	}
+
 	return 0;
 }
 
@@ -240,4 +267,13 @@ void SetClientRect(HWND hWnd, int Width, int Height){
 	SetWindowPos(hWnd, NULL, 0,0, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
 }
 
+void SetStatusText(HWND hWnd){
+	TCHAR Info[MAX_PATH];
 
+	wsprintf(Info, TEXT("Hidden Bombs : %d"), BOMB_COUNT);
+	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)Info);
+	wsprintf(Info, TEXT("Map Size : %dx%d"), MAP_WIDTH, MAP_HEIGHT);
+	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)Info);
+	wsprintf(Info, TEXT("경과 시간 : %d(s)"), g_Time);
+	SendMessage(hStatusWnd, SB_SETTEXT, 2, (LPARAM)Info);
+}

@@ -45,6 +45,7 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 void* LoadBmp(BITMAPINFOHEADER*);
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
 void SetClientRect(HWND hWnd, int Width, int Height);
+void SetStatusText(HWND hWnd);
 void SetMapSize();
 
 #endif

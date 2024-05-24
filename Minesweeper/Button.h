@@ -19,6 +19,7 @@ private:
 
 private:
 	void DrawBitmap(HDC hDC);
+	void ChangeState(STATE NewState);
 	BOOL IsPtOnMe(POINT pt);
 	BOOL IsPtOnMe(LONG x, LONG y);
 
