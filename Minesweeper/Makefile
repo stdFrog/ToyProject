@@ -1,7 +1,7 @@
 CC = g++
 
 MAIN = Minesweeper
-OBJS = resource.o Button.o
+OBJS = resource.o Button.o Color.o
 RCRS = $(OBJS : .o=.cpp)
 
 TARGET = $(MAIN)
