@@ -1,6 +1,11 @@
 #ifndef __BUTTON_H_
 #define __BUTTON_H_
 
+/*
+	확장을 고려하여 여러 스타일의 열거형 타입을 만들어뒀으나 굳이 이럴 필요 없으므로 추후 수정하기로 한다.
+	또한, 멤버 변수와 함수, 초기화 방식도 수정이 필요하다.
+*/
+
 typedef enum { PUSHBUTTON, CHECKBUTTON, RADIOBUTTON, BUTTON_STYLE_LAST_COUNT } BUTTON_STYLE;
 typedef enum {NORMAL, HOT, PRESSED, RELEASE, DISABLE, HIDDEN, STATE_LAST_COUNT} STATE;
 
@@ -36,6 +41,9 @@ public:
 public:
 	UINT GetID() {return _ID;}
 	DWORD GetStyle() {return _Style;}
+
+public:
+	void ChangeParent(HWND hParent) { _hParent = hParent; }
 
 public:
 	void OnMove(LPARAM);

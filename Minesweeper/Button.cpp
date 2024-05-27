@@ -1,6 +1,11 @@
 #include <windows.h>
 #include "Button.h"
 
+/*
+	커스텀 컨트롤의 그리기 주체를 바꿀 필요가 있으므로 전체 수정 필요
+	2024.05.27 11:24
+*/
+
 Button::Button(DWORD Style, LONG x, LONG y, LONG w, LONG h, HWND hParent, UINT ID) : _Style(Style), _X(x), _Y(y), _Width(w), _Height(h), _hParent(hParent), _ID(ID), _bCapture(FALSE), _bTimer(FALSE), _State(NORMAL)
 {
 
@@ -132,6 +137,9 @@ void Button::DrawBitmap(HDC hDC){
 	HBITMAP hBitmap = _hBitmap[_State];
 	HDC hMemDC = CreateCompatibleDC(hDC);
 	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
+
+	/* TODO : 비트맵? 그리기? */
+	Rectangle(hMemDC, 10, 10, 20, 20);
 
 	BitBlt(hDC, _X, _Y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
 

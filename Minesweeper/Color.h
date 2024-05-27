@@ -28,14 +28,11 @@
 	Timer 또는 메세지 루프를 이용하여 Tick단위의 애니메이션
 	곧, 영상 처리를 하고 있진 않으므로 알파값을 추가하지 않았다.
 
-	블렌딩이건 뭐건 결국 가중치를 부여하는 것이므로
-	영상이 아닌 이상 크게 의미가 없다.
+	블렌딩이건 뭐건 결국 가중치를 부여하는 것이므로 영상이 아닌 이상 크게 의미가 없다.
 */
 
 /*
-	색상 자체는 COLORREF와 float 타입의 RGB를 기본 형태로 정하고
-	유지/관리하기로 정한다.
-
+	색상 자체는 COLORREF와 float 타입의 RGB를 기본 형태로 정하고 유지/관리하기로 정한다.
 	메모리를 최소한으로 유지하고 싶다면 공용체를 활용해도 좋다.
 */
 
@@ -58,6 +55,7 @@ public:
 	static const Color Magenta;
 
 public:
+	/* TODO : 연산자 함수 추가 필요 */
 	const Color operator +(const Color& Other){
 		return Color(
 				_R + Other._R,
