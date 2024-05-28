@@ -93,8 +93,10 @@ public:
 	Color ToColor();
 
 public:
-	Color(COLORREF NewColor = RGB(0,0,0));
 	Color(float R = 0.f, float G = 0.f, float B = 0.f, BOOL bHSV = FALSE);
+	operator int() { return (int)ToColorRef(); }
+
+	explicit Color(COLORREF ColorRef);
 	~Color();
 };
 

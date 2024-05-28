@@ -28,7 +28,7 @@ int BOMB_COUNT = 10;
 GAME_STATE g_GameState = GAME_STOP;
 int g_Time;
 
-Button Btn(PUSHBUTTON, 10,10,10,10, NULL, 0);
+Button NewButton(PUSH, 0, 0, 100, 100, 0, NULL);
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -61,7 +61,7 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	SetTimer(hWnd, 1, 1000, NULL);
 	SetTimer(hWnd, 2, 50, NULL);
 
-	Btn.ChangeParent(hWnd);
+	NewButton.ChangeParent(hWnd);
 
 	SendMessage(hWnd, WM_TIMER, 1, 0);
 	return 0;
@@ -142,8 +142,8 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 	/* TODO : 메인 메시지 및 그리기 코드 수정 필요 */
-	Btn.OnPaint(hdc);
 
+	NewButton.OnPaint(hdc);
 	if(hClientBitmap){
 		DrawBitmap(hdc, 0,0, hClientBitmap);
 	}

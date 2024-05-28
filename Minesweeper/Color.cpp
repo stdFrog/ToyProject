@@ -12,10 +12,10 @@ const Color Color::Yellow(1.f, 1.f, 0.f);
 const Color Color::Cyan(0.f, 1.f, 1.f);
 const Color Color::Magenta(1.f, 0.f, 1.f);
 
-Color::Color(COLORREF NewColor) {
-	_R = ((BYTE)(NewColor)) * Ratio;
-	_G = ((BYTE)(((WORD)(NewColor)) >> 8)) * Ratio;
-	_B = ((BYTE)((NewColor) >> 16)) * Ratio;
+Color::Color(COLORREF ColorRef) : _bHSV(FALSE) {
+	_R = ((BYTE)(ColorRef)) * Ratio;
+	_G = ((BYTE)(((WORD)(ColorRef)) >> 8)) * Ratio;
+	_B = ((BYTE)((ColorRef) >> 16)) * Ratio;
 }
 
 Color::Color(float R, float G, float B, BOOL bHSV) 
@@ -42,8 +42,8 @@ COLORREF Color::ToColorRef(){
 	float B = CLAMP(0.f, 1.f, _B);
 
 	UINT RV = (UINT)(R * 255.999f);
-	UINT GV = ((UINT)(G * 255.999f));
-	UINT BV = ((UINT)(B * 255.999f));
+	UINT GV = (UINT)(G * 255.999f);
+	UINT BV = (UINT)(B * 255.999f);
 
 	COLORREF ret = RGB(RV, GV, BV);
 

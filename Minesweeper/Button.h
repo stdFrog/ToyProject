@@ -1,61 +1,87 @@
 #ifndef __BUTTON_H_
 #define __BUTTON_H_
+#include "Color.h"
 
 /*
 	확장을 고려하여 여러 스타일의 열거형 타입을 만들어뒀으나 굳이 이럴 필요 없으므로 추후 수정하기로 한다.
 	또한, 멤버 변수와 함수, 초기화 방식도 수정이 필요하다.
 */
 
-typedef enum { PUSHBUTTON, CHECKBUTTON, RADIOBUTTON, BUTTON_STYLE_LAST_COUNT } BUTTON_STYLE;
-typedef enum {NORMAL, HOT, PRESSED, RELEASE, DISABLE, HIDDEN, STATE_LAST_COUNT} STATE;
+#define IDW_BUTTON 0
 
-class Button{
+typedef enum { PUSH = 0x1, CHECK = 0x2, RADIO = 0x4 } TYPE;
+typedef enum { NORMAL = 0x1, PRESSED = 0x2 } STATE;
+typedef enum { CIRCLE = 0x1, TRIANGLE = 0x2, RECTANGLE = 0x4 } SHAPE;
+
+class Button {
+	static UINT ButtonCount;
+
 private:
-	LONG _X, _Y, _Width, _Height;
+	TYPE _Type;
+	LONG _x, _y, _Width, _Height;
 	UINT _ID;
-	DWORD _Style;
 	HWND _hParent;
-
-private:
 	STATE _State;
+	SHAPE _Shape;
+	Color _Color;
 	BOOL _bCapture;
-	BOOL _bTimer;
-	HBITMAP _hBitmap[STATE_LAST_COUNT];
-
-private:
-	void DrawBitmap(HDC hDC);
-	void ChangeState(STATE NewState);
-	BOOL IsPtOnMe(POINT pt);
-	BOOL IsPtOnMe(LONG x, LONG y);
+	HBITMAP _hBitmap;
 
 public:
-	void SetState(STATE NewState);
-	STATE GetState() {return _State;}
+	VOID DrawBitmap(HDC);
+	BOOL IsPtOnMe(POINT);
+	BOOL IsPtOnMe(LONG, LONG);
 
 public:
-	LONG GetX() {return _X;}
-	LONG GetY() {return _Y;}
-	LONG GetWidth() {return _Width;}
-	LONG GetHeight() {return _Height;}
+	VOID OnPaint(HDC);
+	VOID OnPressed(LPARAM);
+	VOID OnReleased(LPARAM);
 
 public:
-	UINT GetID() {return _ID;}
-	DWORD GetStyle() {return _Style;}
+	VOID ChangeParent(HWND hNewParent) { _hParent = hNewParent; }
+	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL); }
+public:
+	VOID SetID(UINT NewID) { _ID = NewID; }
+	VOID SetType(TYPE NewType) { _Type = NewType; }
+	VOID SetState(STATE NewState) { _State = NewState; }
+	VOID SetShape(SHAPE NewShape) { _Shape = NewShape; }
+	VOID SetColor(Color NewColor) { _Color = NewColor; }
 
 public:
-	void ChangeParent(HWND hParent) { _hParent = hParent; }
+	VOID SetX(LONG x) { _x = x; }
+	VOID SetY(LONG y) { _y = y; }
+	VOID SetWidth(LONG Width) { _Width = Width; }
+	VOID SetHeight(LONG Height) { _Height = Height; }
 
 public:
-	void OnMove(LPARAM);
-	void OnPressed(LPARAM);
-	void OnReleased(LPARAM);
-
-	void OnPaint(HDC);
-	void OnTimer();
+	TYPE GetType() { return _Type; }
+	UINT GetID() { return _ID; }
+	STATE GetState() { return _State; }
 
 public:
-	Button(DWORD Style, LONG x, LONG y, LONG w, LONG h, HWND hParent, UINT ID);
-	~Button();
+	Color GetColor() { return _Color.ToColor(); }
+	COLORREF GetColorRef() { return _Color.ToColorRef(); }
+
+public:
+	LONG GetX() { return _x; }
+	LONG GetY() { return _y; }
+	LONG GetWidth() { return _Width; }
+	LONG GetHeight() { return _Height; }
+
+public:
+	Button(TYPE Type = PUSH, LONG x = 0, LONG y = 0, LONG Width = 0, LONG Height = 0, UINT ID = (UINT)(IDW_BUTTON + Button::ButtonCount), HWND hParent = NULL)
+		: _Type(Type), _x(x), _y(y), _Width(Width), _Height(Height), _ID(ID), _hParent(hParent), _Color()
+	{
+		ButtonCount++;
+		_State = NORMAL;
+		_Shape = RECTANGLE;
+	}
+
+	~Button(){
+		ButtonCount--;
+
+		if(_hBitmap != NULL) { DeleteObject(_hBitmap); }
+	}
 };
 
 #endif
