@@ -5,8 +5,12 @@
 #include <commctrl.h>
 #pragma comment(lib, "comctl32")
 
-RECT g_crt, g_wrt, g_swrt;
+typedef enum { GAME_STOP = 0x1, GAME_BEGIN = 0x2, GAME_PAUSE = 0x4, GAME_OVER = 0x8 } GAME_STATE;
+typedef enum { MAP_SIZE25X25 = 0x1, MAP_SIZE30X20 = 0x2, MAP_SIZE40X30 = 0x4 } MAP_TABLE;
+
+RECT g_crt, g_wrt, g_trt;
 HBITMAP hClientBitmap;
+HMENU hPopupSettings, hPopupSize;
 
 BYTE* pData = NULL;
 BITMAPINFOHEADER sih;
@@ -16,19 +20,19 @@ int StretchMode;
 OSVERSIONINFO osv;
 
 HWND hStatusWnd;
-
-typedef enum {GAME_STOP, GAME_BEGIN, GAME_PAUSE, GAME_OVER} GAME_STATE;
+int BOMB_COUNT = 10;
 
 const int TILE_WIDTH = 16;
 const int TILE_HEIGHT = 16;
-int MAP_WIDTH = 25;
-int MAP_HEIGHT = 25;
-int BOMB_COUNT = 10;
+int MAP_WIDTH;
+int MAP_HEIGHT;
 
 GAME_STATE g_GameState = GAME_STOP;
+MAP_TABLE g_MapTable = MAP_SIZE25X25;
+
 int g_Time;
 
-Button NewButton(PUSH, 0, 0, 100, 100, 0, NULL);
+Button NewButton(PUSH, 0,0, 16,16, 0, NULL);
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -45,25 +49,33 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	AppendMenu(hSysMenu, MF_SEPARATOR, 0, NULL);
 	AppendMenu(hSysMenu, MF_STRING, ID_SYS_ABOUT, TEXT("프로그램 소개"));
 
-	HMENU hPopup = CreatePopupMenu();
-	AppendMenu(hSysMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopup, TEXT("설정"));
-	AppendMenu(hPopup, MF_STRING, 40001, TEXT("새 게임"));
-	AppendMenu(hPopup, MF_STRING, 40002, TEXT("크기 변경"));
+	hPopupSettings = CreatePopupMenu();
+	AppendMenu(hSysMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupSettings, TEXT("설정"));
+	AppendMenu(hPopupSettings, MF_STRING, ID_SYS_NEWGAME, TEXT("새 게임"));
+
+	hPopupSize = CreatePopupMenu();
+	AppendMenu(hPopupSettings, MF_STRING | MF_POPUP, (UINT_PTR)hPopupSize, TEXT("크기 변경"));
+	AppendMenu(hPopupSize, MF_STRING, ID_SYS_RESIZE1, TEXT("25 X 25"));
+	AppendMenu(hPopupSize, MF_STRING, ID_SYS_RESIZE2, TEXT("30 X 20"));
+	AppendMenu(hPopupSize, MF_STRING, ID_SYS_RESIZE3, TEXT("40 X 30"));
 
 	InitCommonControls();
 	hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
+	SendMessage(hStatusWnd, SB_GETRECT, 0, (LPARAM)&g_trt);
 
-	SetClientRect(hWnd, TILE_WIDTH * MAP_WIDTH, TILE_HEIGHT * MAP_HEIGHT);
+	MAP_WIDTH = MAP_HEIGHT = 25;
+	SetClientRect(hWnd, TILE_WIDTH * MAP_WIDTH, TILE_HEIGHT * MAP_HEIGHT + (g_trt.bottom - g_trt.top));
 
-	g_GameState = GAME_BEGIN;
 	g_Time = 0;
+	g_GameState = GAME_STOP;
 
 	SetTimer(hWnd, 1, 1000, NULL);
+	SendMessage(hWnd, WM_TIMER, 1, 0);
+
 	SetTimer(hWnd, 2, 50, NULL);
 
+	/* TEST */
 	NewButton.ChangeParent(hWnd);
-
-	SendMessage(hWnd, WM_TIMER, 1, 0);
 	return 0;
 }
 
@@ -75,28 +87,43 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
-LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+LRESULT OnInitMenu(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	switch(g_MapTable){
+	case MAP_SIZE25X25:
+		CheckMenuRadioItem(hPopupSize, 0, 2, 0, MF_BYPOSITION);
+		break;
 
+	case MAP_SIZE30X20:
+		CheckMenuRadioItem(hPopupSize, 0, 2, 1, MF_BYPOSITION);
+		break;
+
+	case MAP_SIZE40X30:
+		CheckMenuRadioItem(hPopupSize, 0, 2, 2, MF_BYPOSITION);
+		break;
+
+	default:
+		break;
+	}
+	return 0;
+}
+
+LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
 	return 0;
 }
 
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
 	return 0;
 }
 
 LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
 	return 0;
 }
 
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
-
 	return 0;
 }
 
@@ -107,12 +134,19 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			return 0;
 
 		case ID_SYS_NEWGAME:
+			Initialize();
 			return 0;
 
-		case ID_SYS_RESIZE:
+		case ID_SYS_RESIZE1:
+			g_MapTable = MAP_SIZE25X25;
 			return 0;
 
-		case ID_SYS_EXIT:
+		case ID_SYS_RESIZE2:
+			g_MapTable = MAP_SIZE30X20;
+			return 0;
+
+		case ID_SYS_RESIZE3:
+			g_MapTable = MAP_SIZE40X30;
 			return 0;
 
 		default:
@@ -134,6 +168,7 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			Part[i] = LOWORD(lParam) / 3 * (i + 1);
 		}
 		SendMessage(hStatusWnd, SB_SETPARTS, 3, (LPARAM)Part);
+
 	}
 	return 0;
 }
@@ -141,24 +176,17 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
-	/* TODO : 메인 메시지 및 그리기 코드 수정 필요 */
-
-	NewButton.OnPaint(hdc);
-	if(hClientBitmap){
-		DrawBitmap(hdc, 0,0, hClientBitmap);
-	}
+	/* TODO : 게임 상태에 따라 그리기 코드가 변화해야 하므로 게임 화면을 그릴 개별 함수 작성 필요 */
 
 	EndPaint(hWnd, &ps);
 	return 0;
 }
 
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	RECT clip;
-
 	switch(wParam){
 		case 1:
 			{
-				if(g_GameState = GAME_BEGIN){
+				if(g_GameState == GAME_BEGIN){
 					g_Time++;
 				}
 
@@ -170,75 +198,12 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 				SetStatusText(hWnd);
 			}
 
-			SendMessage(hStatusWnd, SB_GETRECT, 2, (LPARAM)&clip);
-			InvalidateRect(hWnd, &clip, FALSE);
+			SendMessage(hStatusWnd, SB_GETRECT, 2, (LPARAM)&g_trt);
+			InvalidateRect(hWnd, &g_trt, FALSE);
 			break;
 	}
 
 	return 0;
-}
-
-void* LoadBmp(BITMAPINFOHEADER* ih){
-	void *buf = NULL;
-	TCHAR lpstrFile[MAX_PATH] = TEXT("");
-	TCHAR FileName[MAX_PATH];
-	TCHAR InitDir[MAX_PATH];
-	TCHAR *path[MAX_PATH];
-	TCHAR *pt = NULL;
-	OPENFILENAME ofn;
-
-	memset(&ofn, 0, sizeof(OPENFILENAME));
-	ofn.lStructSize = sizeof(OPENFILENAME);
-	ofn.lpstrFile = lpstrFile;
-	ofn.lpstrFilter = TEXT("모든 파일(*.*)\0*.*\0비트맵 파일(*.bmp)\0*.bmp\0\0");
-	ofn.lpstrTitle= TEXT("비트맵 파일을 선택하세요");
-	ofn.lpstrDefExt = TEXT("txt");
-	ofn.nMaxFile = MAX_PATH;
-	ofn.nMaxFileTitle = MAX_PATH;
-	ofn.hwndOwner = NULL;
-
-	GetWindowsDirectory(InitDir, MAX_PATH);
-	ofn.lpstrInitialDir = InitDir;
-
-	if(GetOpenFileName(&ofn) != 0)
-	{
-		if(wcscmp(lpstrFile + ofn.nFileExtension, TEXT("bmp")) == 0)
-		{
-			HANDLE hFile = CreateFile(lpstrFile, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-			if(hFile != INVALID_HANDLE_VALUE)
-			{
-				DWORD dwRead;
-				SetFilePointer(hFile, sizeof(BITMAPFILEHEADER), NULL, FILE_BEGIN);
-				if(ReadFile(hFile, ih, sizeof(BITMAPINFOHEADER), &dwRead, NULL))
-				{
-					if(ih->biSizeImage == 0)
-					{
-						ih->biSizeImage = (((ih->biBitCount * ih->biWidth + 31) / 32) * 4 * ih->biHeight);
-					}
-
-					buf = malloc(ih->biSizeImage);
-					if(ReadFile(hFile, buf, ih->biSizeImage, &dwRead, NULL))
-					{
-						CloseHandle(hFile);
-						return buf;
-					}else{
-						MessageBox(NULL, TEXT("Failed to read bmp file data"), TEXT("Error"), MB_OK);
-					}
-				}else{
-					MessageBox(NULL, TEXT("Failed to ReadFile"), TEXT("Error"), MB_OK);
-				}
-
-				CloseHandle(hFile);
-			}else{
-				MessageBox(NULL, TEXT("cannot open this file"), TEXT("Error"), MB_OK);
-			}
-		}else{
-			MessageBox(NULL, TEXT("those not bmp file"), TEXT("Warning"), MB_OK);
-		}
-	}
-
-	return NULL;
 }
 
 void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
@@ -256,8 +221,12 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	DeleteDC(hMemDC);
 }
 
-void SetMapSize(){
-	/* 대화상자를 생성하여 화면 설정을 마칩니다. */
+void MapResize(MAP_TABLE CurrentTable){
+	/* 대화상자 또는 팝업 메뉴 추가해서 맵 사이즈 변경 */
+}
+
+void Initialize(){
+	/* TODO : 게임 상태 및 설정에 관련된 정보를 메뉴로부터 받아온 후 변수나 함수를 초기화 또는 호출 */
 }
 
 void SetClientRect(HWND hWnd, int Width, int Height){
@@ -278,7 +247,7 @@ void SetClientRect(HWND hWnd, int Width, int Height){
 void SetStatusText(HWND hWnd){
 	TCHAR Info[MAX_PATH];
 
-	wsprintf(Info, TEXT("Hidden Bombs : %d"), BOMB_COUNT);
+	wsprintf(Info, TEXT("Hidden Bombs : %d"), ((g_GameState != GAME_BEGIN) ? 0 : BOMB_COUNT));
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)Info);
 	wsprintf(Info, TEXT("Map Size : %dx%d"), MAP_WIDTH, MAP_HEIGHT);
 	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)Info);

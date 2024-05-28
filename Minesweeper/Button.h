@@ -28,14 +28,17 @@ private:
 	HBITMAP _hBitmap;
 
 public:
+	VOID DisplayState();
+
+public:
 	VOID DrawBitmap(HDC);
 	BOOL IsPtOnMe(POINT);
 	BOOL IsPtOnMe(LONG, LONG);
 
 public:
 	VOID OnPaint(HDC);
-	VOID OnPressed(LPARAM);
-	VOID OnReleased(LPARAM);
+	VOID OnPressed(LPARAM, BOOL bLeft = TRUE);
+	VOID OnReleased(LPARAM, BOOL bLeft = TRUE);
 
 public:
 	VOID ChangeParent(HWND hNewParent) { _hParent = hNewParent; }
@@ -70,7 +73,7 @@ public:
 
 public:
 	Button(TYPE Type = PUSH, LONG x = 0, LONG y = 0, LONG Width = 0, LONG Height = 0, UINT ID = (UINT)(IDW_BUTTON + Button::ButtonCount), HWND hParent = NULL)
-		: _Type(Type), _x(x), _y(y), _Width(Width), _Height(Height), _ID(ID), _hParent(hParent), _Color()
+		: _Type(Type), _x(x), _y(y), _Width(Width), _Height(Height), _ID(ID), _hParent(hParent), _Color(), _bCapture(FALSE), _hBitmap(NULL)
 	{
 		ButtonCount++;
 		_State = NORMAL;

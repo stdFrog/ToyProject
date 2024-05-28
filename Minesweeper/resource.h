@@ -20,8 +20,9 @@
 
 #define ID_SYS_ABOUT	40000
 #define ID_SYS_NEWGAME	40001
-#define ID_SYS_RESIZE	40002
-#define ID_SYS_EXIT		40003
+#define ID_SYS_RESIZE1	40002
+#define ID_SYS_RESIZE2	40003
+#define ID_SYS_RESIZE3	40004
 
 #define IDW_STATUS		10000
 
@@ -41,11 +42,13 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnInitMenu(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 void* LoadBmp(BITMAPINFOHEADER*);
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
 void SetClientRect(HWND hWnd, int Width, int Height);
 void SetStatusText(HWND hWnd);
-void SetMapSize();
+void MapResize();
+void Initialize();
 
 #endif

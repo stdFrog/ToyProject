@@ -4,6 +4,8 @@
 const float Color::Ratio = 1.f / 255.f;
 const Color Color::White(1.f, 1.f, 1.f);
 const Color Color::Black(0.f, 0.f, 0.f);
+const Color Color::WhiteGray(0.9f, 0.9f, 0.9f);
+const Color Color::LightGray(0.75f, 0.75f, 0.75f);
 const Color Color::Gray(0.5f, 0.5f, 0.5f);
 const Color Color::Red(1.f, 0.f, 0.f);
 const Color Color::Green(0.f, 1.f, 0.f);
