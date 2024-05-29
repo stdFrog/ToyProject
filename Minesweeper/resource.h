@@ -26,11 +26,13 @@
 
 #define IDW_STATUS		10000
 
+/* Msg Map */
 typedef struct tag_MSGMAP{
 	UINT iMessage;
 	LRESULT (*lpfnWndProc)(HWND, WPARAM, LPARAM);
 }MSGMAP;
 
+/* Procedure */
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
@@ -39,16 +41,24 @@ LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
+LRESULT OnExitSizeMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnInitMenu(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
-void* LoadBmp(BITMAPINFOHEADER*);
+/* Utility */
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
 void SetClientRect(HWND hWnd, int Width, int Height);
 void SetStatusText(HWND hWnd);
-void MapResize();
-void Initialize();
+
+/* Game Settings */
+class Button;
+Button** CreateButton(int w, int h);
+void DestroyButton(Button** Btns);
+BOOL InitializeButton(HWND hWnd, Button** Btns);
+
+/* OnFunction */
+void DisplayButtons(HDC, Button**);
 
 #endif

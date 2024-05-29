@@ -57,6 +57,7 @@ MSGMAP mainmsg[] = {
 	{WM_TIMER, OnTimer},
 	{WM_PAINT, OnPaint},
 	{WM_SIZE, OnSize},
+	{WM_EXITSIZEMOVE, OnExitSizeMove},
 	{WM_SYSCOMMAND, OnSysCommand},
 	{WM_INITMENU, OnInitMenu},
 	{WM_MOUSEMOVE, OnMouseMove},

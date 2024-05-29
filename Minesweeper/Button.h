@@ -57,9 +57,11 @@ public:
 	VOID SetHeight(LONG Height) { _Height = Height; }
 
 public:
-	TYPE GetType() { return _Type; }
 	UINT GetID() { return _ID; }
+	TYPE GetType() { return _Type; }
+	HWND GetParent() { return _hParent; }
 	STATE GetState() { return _State; }
+	SHAPE GetShape() { return _Shape; }
 
 public:
 	Color GetColor() { return _Color.ToColor(); }

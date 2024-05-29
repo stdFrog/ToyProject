@@ -74,6 +74,7 @@ BOOL Button::IsPtOnMe(LONG x, LONG y){
 }
 
 VOID Button::DrawBitmap(HDC hDC){
+	/*
 	BOOL ParentDC = FALSE;
 
 	if(hDC == NULL){
@@ -87,36 +88,50 @@ VOID Button::DrawBitmap(HDC hDC){
 
 	HDC hMemDC = CreateCompatibleDC(hDC);
 	HGDIOBJ hOld = SelectObject(hMemDC, _hBitmap);
+	*/
 
 	switch(_State){
 		default:
 		case NORMAL:
 			{
 				/* TODO : 그라데이션 / 애니메이션 효과 */
-				_Color = Color(Color::LightGray);
+				/*
 				HBRUSH hBrush = CreateSolidBrush(_Color);
 				HBRUSH hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
 				Rectangle(hMemDC, _x, _y, _Width, _Height);
 				DeleteObject(SelectObject(hMemDC, hOldBrush));
+				*/
+				HBRUSH hBrush = CreateSolidBrush(_Color);
+				HBRUSH hOldBrush = (HBRUSH)SelectObject(hDC, hBrush);
+				Rectangle(hDC, _x, _y, _Width, _Height);
+				DeleteObject(SelectObject(hDC, hOldBrush));
 			}
 			break;
 
 		case PRESSED:
 			{
-				_Color = Color(Color::LightGray);
+				/*
 				HBRUSH hBrush = CreateSolidBrush(_Color);
 				HBRUSH hOldBrush = (HBRUSH)SelectObject(hMemDC, hBrush);
 				Rectangle(hMemDC, _x, _y, _Width, _Height);
 				DeleteObject(SelectObject(hMemDC, hOldBrush));
+				*/
+
+				HBRUSH hBrush = CreateSolidBrush(_Color);
+				HBRUSH hOldBrush = (HBRUSH)SelectObject(hDC, hBrush);
+				Rectangle(hDC, _x, _y, _Width, _Height);
+				DeleteObject(SelectObject(hDC, hOldBrush));
 			}
 			break;
 	}
 
+	/*
 	BitBlt(hDC, _x, _y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
 
 	if(ParentDC){ ReleaseDC(_hParent, hDC); }
+	*/
 }
 

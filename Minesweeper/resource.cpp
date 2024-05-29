@@ -5,34 +5,45 @@
 #include <commctrl.h>
 #pragma comment(lib, "comctl32")
 
-typedef enum { GAME_STOP = 0x1, GAME_BEGIN = 0x2, GAME_PAUSE = 0x4, GAME_OVER = 0x8 } GAME_STATE;
-typedef enum { MAP_SIZE25X25 = 0x1, MAP_SIZE30X20 = 0x2, MAP_SIZE40X30 = 0x4 } MAP_TABLE;
-
+HWND hStatusWnd;
 RECT g_crt, g_wrt, g_trt;
-HBITMAP hClientBitmap;
 HMENU hPopupSettings, hPopupSize;
-
-BYTE* pData = NULL;
-BITMAPINFOHEADER sih;
-BITMAPINFOHEADER ih;
+HBITMAP hClientBitmap = NULL, hBkBitmap = NULL;
 
 int StretchMode;
 OSVERSIONINFO osv;
 
-HWND hStatusWnd;
-int BOMB_COUNT = 10;
+Button** Buttons = NULL;
 
-const int TILE_WIDTH = 16;
-const int TILE_HEIGHT = 16;
-int MAP_WIDTH;
-int MAP_HEIGHT;
+/*
+	굉장히 오래된 API를 이용하여 게임을 제작하다 보니 굉장히 많은 시행착오를 겪고 있다.
+	디테일한 부분까지 모두 직접 신경써야 하므로 메시지의 종류뿐 아니라 함수와 리소스,
+	화면 관리 방법까지 하나하나 찾아볼 수 밖에 없다.
 
-GAME_STATE g_GameState = GAME_STOP;
-MAP_TABLE g_MapTable = MAP_SIZE25X25;
+	남은 시간이 길지 않으나 여러 기법을 적용해보고 학습에 목적을 두기로 한다.
+*/
 
-int g_Time;
 
-Button NewButton(PUSH, 0,0, 16,16, 0, NULL);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -62,50 +73,72 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	InitCommonControls();
 	hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
 	SendMessage(hStatusWnd, SB_GETRECT, 0, (LPARAM)&g_trt);
+	
+	SetClientRect(hWnd, 16 * 25, 16 * 25 + (g_trt.bottom - g_trt.top));
+	Buttons = CreateButton(25, 25);
+	InitializeButton(hWnd, Buttons);
 
-	MAP_WIDTH = MAP_HEIGHT = 25;
-	SetClientRect(hWnd, TILE_WIDTH * MAP_WIDTH, TILE_HEIGHT * MAP_HEIGHT + (g_trt.bottom - g_trt.top));
+	GetClientRect(hWnd, &g_crt);
 
-	g_Time = 0;
-	g_GameState = GAME_STOP;
-
-	SetTimer(hWnd, 1, 1000, NULL);
+	SetTimer(hWnd, 1, 50, NULL);
 	SendMessage(hWnd, WM_TIMER, 1, 0);
-
-	SetTimer(hWnd, 2, 50, NULL);
-
-	/* TEST */
-	NewButton.ChangeParent(hWnd);
 	return 0;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	KillTimer(hWnd, 1);
+	if(hBkBitmap){DeleteObject(hBkBitmap);}
 	if(hClientBitmap){DeleteObject(hClientBitmap);}
-	if(pData){free(pData);}
+	if(Buttons){DestroyButton(Buttons);}
+
+	KillTimer(hWnd, 1);
 	PostQuitMessage(0);
 	return 0;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 LRESULT OnInitMenu(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	switch(g_MapTable){
-	case MAP_SIZE25X25:
-		CheckMenuRadioItem(hPopupSize, 0, 2, 0, MF_BYPOSITION);
-		break;
-
-	case MAP_SIZE30X20:
-		CheckMenuRadioItem(hPopupSize, 0, 2, 1, MF_BYPOSITION);
-		break;
-
-	case MAP_SIZE40X30:
-		CheckMenuRadioItem(hPopupSize, 0, 2, 2, MF_BYPOSITION);
-		break;
-
-	default:
-		break;
-	}
+	
+	
 	return 0;
 }
+
+
+
+
+
+
+
+
+
+
 
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
@@ -127,6 +160,18 @@ LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(LOWORD(wParam)){
 		case ID_SYS_ABOUT:
@@ -134,19 +179,15 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			return 0;
 
 		case ID_SYS_NEWGAME:
-			Initialize();
 			return 0;
 
 		case ID_SYS_RESIZE1:
-			g_MapTable = MAP_SIZE25X25;
 			return 0;
 
 		case ID_SYS_RESIZE2:
-			g_MapTable = MAP_SIZE30X20;
 			return 0;
 
 		case ID_SYS_RESIZE3:
-			g_MapTable = MAP_SIZE40X30;
 			return 0;
 
 		default:
@@ -154,58 +195,169 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 }
 
+
+
+
+
+
+
+
+
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	INT Part[3];
 
 	if(wParam != SIZE_MINIMIZED) {
-		if(hClientBitmap) {
+		KillTimer(hWnd, 1);
+		/*
+		if(hClientBitmap != NULL){
 			DeleteObject(hClientBitmap);
 			hClientBitmap = NULL;
 		}
+		*/
 
 		SendMessage(hStatusWnd, WM_SIZE, wParam, lParam);
 		for(int i=0; i<3; i++){
 			Part[i] = LOWORD(lParam) / 3 * (i + 1);
 		}
 		SendMessage(hStatusWnd, SB_SETPARTS, 3, (LPARAM)Part);
-
 	}
 	return 0;
 }
+
+LRESULT OnExitSizeMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	if(hClientBitmap != NULL){
+		DeleteObject(hClientBitmap);
+		hClientBitmap = NULL;
+	}
+
+	SetTimer(hWnd, 1, 50, NULL);
+	SendMessage(hWnd, WM_TIMER, 1, 0);
+	return 0;
+}
+
+
+
+
+
+
 
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
-	/* TODO : 게임 상태에 따라 그리기 코드가 변화해야 하므로 게임 화면을 그릴 개별 함수 작성 필요 */
-
+	if(hClientBitmap){
+		DrawBitmap(hdc, 0,0, hClientBitmap);
+	}else if(hBkBitmap){
+		DrawBitmap(hdc, 0,0, hBkBitmap);
+	}
 	EndPaint(hWnd, &ps);
 	return 0;
 }
 
+
+
+
+
+
+
+
+
+
+
+/* 
+	굳이 타이머를 쓰겠다 하면, 아래와 같은 코드를 작성할 수 있다.
+	단, 화면을 계속해서 그려야 하는 게임이 아니므로 이 코드는 보류하고
+	모든 그리기 관련 코드와 게임 관련 함수를 WM_PAINT에서 처리하기로 한다.
+ */
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(wParam){
 		case 1:
 			{
-				if(g_GameState == GAME_BEGIN){
-					g_Time++;
+				HDC hdc = GetDC(hWnd);
+				HDC hMemDC = CreateCompatibleDC(hdc);
+				HDC hBkDC = CreateCompatibleDC(hdc);
+
+				if(hClientBitmap == NULL){
+					GetClientRect(hWnd, &g_crt);
+					hClientBitmap = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
+
+					if(hBkBitmap != NULL){DeleteObject(hBkBitmap);}
+					hBkBitmap = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
 				}
 
-			}
-			break;
+				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
+				HGDIOBJ hOld2 = SelectObject(hBkDC, hBkBitmap);
 
-		case 2:
-			{
-				SetStatusText(hWnd);
-			}
+				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
+				FillRect(hBkDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
 
-			SendMessage(hStatusWnd, SB_GETRECT, 2, (LPARAM)&g_trt);
-			InvalidateRect(hWnd, &g_trt, FALSE);
+				DisplayButtons(hMemDC, Buttons);
+
+				TCHAR Info[0x400];
+				wsprintf(Info,
+					TEXT(" Type = %s\r\n")
+					TEXT(" Position(%d, %d, %d, %d)\r\n")
+					TEXT(" ID = %d\r\n")
+					TEXT(" Parent = %#x\r\n")
+					TEXT(" State = %s\r\n")
+					TEXT(" Shape = %s\r\n")
+					TEXT(" Color(R: %d, G: %d, B: %d)\r\n ")
+					TEXT(" Array Size = H(%d), W(%d)\r\n ")
+					,
+					((Buttons[0][2].GetType() == PUSH) ? TEXT("PUSH BUTTON") : TEXT("")),
+					 Buttons[0][2].GetX(), Buttons[0][0].GetY(), Buttons[0][0].GetWidth(), Buttons[0][0].GetHeight(),
+					Buttons[0][2].GetID(),
+					Buttons[0][2].GetParent(),
+					((Buttons[0][2].GetState() == NORMAL) ? TEXT("NORMAL") : TEXT("")),
+					((Buttons[0][2].GetShape() == RECTANGLE) ? TEXT("RECTANGLE") : TEXT("")),
+					GetRValue(Buttons[0][2].GetColorRef()), GetGValue(Buttons[0][2].GetColorRef()), GetBValue(Buttons[0][2].GetColorRef()),
+					sizeof(Buttons) / sizeof(Buttons[0]),
+					sizeof(Buttons[0]) / sizeof(Button)
+				);
+
+				TextOut(hMemDC, 10, 16, Info, lstrlen(Info));
+
+				if(hClientBitmap){
+					DrawBitmap(hBkDC, 0,0, hClientBitmap);
+				}
+
+				SelectObject(hMemDC, hOld);
+				DeleteDC(hBkDC);
+				DeleteDC(hMemDC);
+				ReleaseDC(hWnd, hdc);
+			}
 			break;
 	}
 
+	InvalidateRect(hWnd, NULL, FALSE);
 	return 0;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Utility */
 void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	if(hBitmap == NULL){return;}
 
@@ -219,14 +371,6 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
-}
-
-void MapResize(MAP_TABLE CurrentTable){
-	/* 대화상자 또는 팝업 메뉴 추가해서 맵 사이즈 변경 */
-}
-
-void Initialize(){
-	/* TODO : 게임 상태 및 설정에 관련된 정보를 메뉴로부터 받아온 후 변수나 함수를 초기화 또는 호출 */
 }
 
 void SetClientRect(HWND hWnd, int Width, int Height){
@@ -244,6 +388,7 @@ void SetClientRect(HWND hWnd, int Width, int Height){
 	SetWindowPos(hWnd, NULL, 0,0, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
 }
 
+/*
 void SetStatusText(HWND hWnd){
 	TCHAR Info[MAX_PATH];
 
@@ -253,4 +398,55 @@ void SetStatusText(HWND hWnd){
 	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)Info);
 	wsprintf(Info, TEXT("경과 시간 : %d(s)"), g_Time);
 	SendMessage(hStatusWnd, SB_SETTEXT, 2, (LPARAM)Info);
+}
+*/
+
+/* Game Settings */
+Button** CreateButton(int w, int h){
+	Button** Btns = new Button*[h];
+	for(int i=0; i<h; i++){
+		Btns[i] = new Button[w];
+	}
+
+	return Btns;
+}
+
+void DestroyButton(Button** Btns){
+	for(int i=0; i<25; i++){
+		delete [] Btns[i];
+	}
+
+	delete [] Btns;
+}
+
+BOOL InitializeButton(HWND hWnd, Button** Btns){
+	/*
+	for(int i=0; i<sizeof(Btns) / sizeof(Btns[0]); i++){
+		for(int j=0; j<sizeof(Btns[0]) / sizeof(Button); j++){
+		*/
+	for(int i=0; i<25; i++){
+		for(int j=0; j<25; j++){
+			Btns[i][j].ChangeParent(hWnd);
+			Btns[i][j].SetX(j * 16);
+			Btns[i][j].SetY(i * 16);
+			Btns[i][j].SetWidth(16);
+			Btns[i][j].SetHeight(16);
+			Btns[i][j].SetColor(Color(Color::LightGray));
+		}
+	}
+
+	return TRUE;
+}
+
+/* OnFunction */
+void DisplayButtons(HDC hDC, Button** Btns){
+	/*
+	for(int i=0; i<sizeof(Btns) / sizeof(Btns[0]); i++){
+		for(int j=0; j<sizeof(Btns[0]) / sizeof(Button); j++){
+		*/
+	for(int i=0; i<25; i++){
+		for(int j=0; j<25; j++){
+			Btns[i][j].OnPaint(hDC);
+		}
+	}
 }
