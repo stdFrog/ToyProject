@@ -10,7 +10,7 @@
 #define IDW_BUTTON 0
 
 typedef enum { PUSH = 0x1, CHECK = 0x2, RADIO = 0x4 } TYPE;
-typedef enum { NORMAL = 0x1, PRESSED = 0x2 } STATE;
+typedef enum { NORMAL = 0x1, PRESSED = 0x2, BLOCK = 0x4 } STATE;
 typedef enum { CIRCLE = 0x1, TRIANGLE = 0x2, RECTANGLE = 0x4 } SHAPE;
 
 class Button {
