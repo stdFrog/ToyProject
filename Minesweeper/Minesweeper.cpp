@@ -58,7 +58,6 @@ MSGMAP mainmsg[] = {
 	{WM_PAINT, OnPaint},
 	{WM_SIZE, OnSize},
 	{WM_SYSCOMMAND, OnSysCommand},
-	// {WM_INITMENU, OnInitMenu},
 	{WM_LBUTTONDOWN, OnLButtonDown},
 	{WM_RBUTTONDOWN, OnRButtonDown},
 	{WM_CREATE, OnCreate},

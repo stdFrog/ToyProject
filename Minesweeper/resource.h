@@ -39,7 +39,6 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam);
-// LRESULT OnInitMenu(HWND hWnd, WPARAM wParam, LPARAM lParam);
 
 void DrawBitmap(HDC, LONG, LONG, HBITMAP);
 void SetClientRect(HWND hWnd, int Width, int Height);
@@ -51,6 +50,6 @@ void DestroyButton(Button** Btns);
 BOOL InitializeButton(HWND hWnd, Button** Btns);
 void Resize(WPARAM, Button***);
 
-// void DisplayButtons(HDC, Button**);
+void DisplayButtons(HDC, Button**);
 
 #endif

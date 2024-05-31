@@ -26,21 +26,13 @@ MapSize Table[3] = {
 	{40, 30}
 };
 
-typedef enum { GAME_STOP, GAME_BEGIN, GAME_PAUSE, GAME_END } GAME_STATE;
+typedef enum { GAME_BEGIN, GAME_PAUSE, GAME_END } GAME_STATE;
 UINT_PTR Index;
 UINT_PTR g_Time;
 
 int Bomb;
 Button** Buttons = NULL;
 GAME_STATE g_GameState;
-
-/*
-	굉장히 오래된 API를 이용하여 게임을 제작하다 보니 굉장히 많은 시행착오를 겪고 있다.
-	디테일한 부분까지 모두 직접 신경써야 하므로 메시지의 종류뿐 아니라 함수와 리소스,
-	화면 관리 방법까지 하나하나 찾아볼 수 밖에 없다.
-
-	남은 시간이 길지 않으나 여러 기법을 적용해보고 학습에 목적을 두기로 한다.
-*/
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -79,7 +71,7 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	InitializeButton(hWnd, Buttons);
 
 	GetClientRect(hWnd, &g_crt);
-	g_GameState = GAME_STOP;
+	g_GameState = GAME_PAUSE;
 
 	return 0;
 }
@@ -106,7 +98,7 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 	switch(LOWORD(wParam)){
 		case ID_SYS_ABOUT:
-			MessageBox(hWnd, TEXT("이 프로그램은 고전 게임 '지뢰찾기'를 모작한 것이며 마우스 조작을 통해 게임을 진행하실 수 있습니다.\r\n\r\n시스템적 변화는 일절 없으며 시스템 메뉴에서 게임 옵션을 조정할 수 있습니다.\r\n\r\n"), TEXT("프로그램 소개"), MB_OK);
+			MessageBox(hWnd, TEXT("이 프로그램은 고전 게임 '지뢰찾기'를 모작한 것이며 마우스 조작을 통해 게임을 진행하실 수 있습니다.\r\n\r\n시스템적 변화는 일절 없으며 메뉴에서 게임 옵션을 조정할 수 있습니다.\r\n\r\n"), TEXT("프로그램 소개"), MB_OK);
 			return 0;
 
 		case ID_SYS_NEWGAME:
@@ -143,28 +135,11 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	CONST TCHAR Message[0x400] = TEXT("이 프로그램은 지뢰찾기 게임으로\r\n게임을 시작하려면 제목 표시줄에서 우클릭하여\r\n관련 설정을 직접 선택하셔야 합니다.");
-
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 
+	DisplayButtons(hdc, Buttons);
 	switch(g_GameState){
-		case GAME_STOP:
-			{
-				RECT temp;
-				int div = g_crt.bottom - g_crt.top >> 2;
-				SetRect(&temp, g_crt.left, div, g_crt.right - g_crt.left, g_crt.bottom - div);
-
-				if(bLeak){
-					TCHAR Debug[256];
-					wsprintf(Debug, TEXT("Memory Leak"));
-					DrawText(hdc, Debug, -1, &temp, DT_CENTER | DT_WORDBREAK);
-				}else{
-					DrawText(hdc, Message, -1, &temp, DT_CENTER | DT_WORDBREAK);
-				}
-			}
-			break;
-
 		case GAME_BEGIN:
 			break;
 
@@ -322,61 +297,3 @@ void DisplayButtons(HDC hDC, Button** Btns){
 		}
 	}
 }
-
-/*
-void DisplayButtons(){
-				HDC hdc = GetDC(hWnd);
-				HDC hMemDC = CreateCompatibleDC(hdc);
-				HDC hBkDC = CreateCompatibleDC(hdc);
-
-				if(hClientBitmap == NULL){
-					GetClientRect(hWnd, &g_crt);
-					hClientBitmap = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
-
-					if(hBkBitmap != NULL){DeleteObject(hBkBitmap);}
-					hBkBitmap = CreateCompatibleBitmap(hdc, g_crt.right, g_crt.bottom);
-				}
-
-				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
-				HGDIOBJ hOld2 = SelectObject(hBkDC, hBkBitmap);
-
-				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
-				FillRect(hBkDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
-
-				DisplayButtons(hMemDC, Buttons);
-
-				TCHAR Info[0x400];
-				wsprintf(Info,
-					TEXT(" Type = %s\r\n")
-					TEXT(" Position(%d, %d, %d, %d)\r\n")
-					TEXT(" ID = %d\r\n")
-					TEXT(" Parent = %#x\r\n")
-					TEXT(" State = %s\r\n")
-					TEXT(" Shape = %s\r\n")
-					TEXT(" Color(R: %d, G: %d, B: %d)\r\n ")
-					TEXT(" Array Size = H(%d), W(%d)\r\n ")
-					,
-					((Buttons[0][2].GetType() == PUSH) ? TEXT("PUSH BUTTON") : TEXT("")),
-					 Buttons[0][2].GetX(), Buttons[0][0].GetY(), Buttons[0][0].GetWidth(), Buttons[0][0].GetHeight(),
-					Buttons[0][2].GetID(),
-					Buttons[0][2].GetParent(),
-					((Buttons[0][2].GetState() == NORMAL) ? TEXT("NORMAL") : TEXT("")),
-					((Buttons[0][2].GetShape() == RECTANGLE) ? TEXT("RECTANGLE") : TEXT("")),
-					GetRValue(Buttons[0][2].GetColorRef()), GetGValue(Buttons[0][2].GetColorRef()), GetBValue(Buttons[0][2].GetColorRef()),
-					sizeof(Buttons) / sizeof(Buttons[0]),
-					sizeof(Buttons[0]) / sizeof(Button)
-				);
-
-				TextOut(hMemDC, 10, 16, Info, lstrlen(Info));
-
-				if(hClientBitmap){
-					DrawBitmap(hBkDC, 0,0, hClientBitmap);
-				}
-
-				SelectObject(hMemDC, hOld);
-				DeleteDC(hBkDC);
-				DeleteDC(hMemDC);
-				ReleaseDC(hWnd, hdc);
-
-}
-*/

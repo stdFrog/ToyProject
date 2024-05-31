@@ -2,6 +2,7 @@
 #define __COLOR_H_
 
 #include <windows.h>
+#define max(a,b) (((a) > (b)) ? (a) : (b))
 
 /*
 	Hue(색상)
@@ -36,7 +37,7 @@
 	메모리를 최소한으로 유지하고 싶다면 공용체를 활용해도 좋다.
 */
 
-class Color{
+class Color {
 public:
 	BOOL _bHSV;
 	float _H, _S, _V;
@@ -58,7 +59,7 @@ public:
 
 public:
 	/* TODO : 연산자 함수 추가 필요 */
-	const Color operator +(const Color& Other){
+	const Color operator +(const Color& Other) const {
 		return Color(
 				_R + Other._R,
 				_G + Other._G,
@@ -66,15 +67,15 @@ public:
 		);
 	}
 
-	const Color operator -(const Color& Other){
-			return Color(
+	const Color operator -(const Color& Other) const {
+		return Color(
 				_R - Other._R,
 				_G - Other._G,
 				_B - Other._B
 		);
 	}
 
-	const Color operator *(const Color& Other){
+	const Color operator *(const Color& Other) const {
 		return Color(
 				_R * Other._R,
 				_G * Other._G,
@@ -82,13 +83,57 @@ public:
 		);
 	}
 
-	const Color operator /(const Color& Other){
+	const Color operator /(const Color& Other) const {
 		return Color(
 				_R / Other._R,
 				_G / Other._G,
 				_B / Other._B
 		);
 	}
+
+	const Color operator +(const float& Value) const {
+		return Color(
+				_R + Value,
+				_G + Value,
+				_B + Value
+		);
+	}
+
+	const Color operator -(const float& Value) const {
+			return Color(
+				_R - Value,
+				_G - Value,
+				_B - Value
+		);
+	}
+
+	const Color operator *(const float& Value) const {
+		return Color(
+				_R * Value,
+				_G * Value,
+				_B * Value
+		);
+	}
+
+	const Color operator /(const float& Value) const {
+		return Color(
+				_R / Value,
+				_G / Value,
+				_B / Value
+		);
+	}
+
+	/*
+		.cpp
+
+	const Color operator +(const float& Value, const Color& C);
+	const Color operator -(const float& Value, const Color& C);
+	const Color operator *(const float& Value, const Color& C);
+	const Color operator /(const float& Value, const Color& C);
+	*/
+
+public:
+	float MaxColor() const { return max(_R, max(_G, _B)); }
 
 public:
 	COLORREF ToColorRef();
@@ -97,9 +142,10 @@ public:
 public:
 	Color(float R = 0.f, float G = 0.f, float B = 0.f, BOOL bHSV = FALSE);
 	operator int() { return (int)ToColorRef(); }
-
 	explicit Color(COLORREF ColorRef);
 	~Color();
 };
+
+
 
 #endif

@@ -14,6 +14,7 @@ const Color Color::Yellow(1.f, 1.f, 0.f);
 const Color Color::Cyan(0.f, 1.f, 1.f);
 const Color Color::Magenta(1.f, 0.f, 1.f);
 
+
 Color::Color(COLORREF ColorRef) : _bHSV(FALSE) {
 	_R = ((BYTE)(ColorRef)) * Ratio;
 	_G = ((BYTE)(((WORD)(ColorRef)) >> 8)) * Ratio;
@@ -70,3 +71,22 @@ Color Color::ToColor(){
 
 	return Color(R,G,B);
 }
+
+const Color operator +(const float& Value, const Color& C) {
+	return C + Value;
+}
+
+const Color operator -(const float& Value, const Color& C) {
+	return C - Value;
+}
+
+const Color operator *(const float& Value, const Color& C) {
+	return C * Value;
+}
+
+const Color operator /(const float& Value, const Color& C) {
+	return C / Value;
+}
+
+
+
