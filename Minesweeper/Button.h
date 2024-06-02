@@ -1,6 +1,5 @@
 #ifndef __BUTTON_H_
 #define __BUTTON_H_
-#include "Color.h"
 
 /*
 	확장을 고려하여 여러 스타일의 열거형 타입을 만들어뒀으나 굳이 이럴 필요 없으므로 추후 수정하기로 한다.
@@ -23,7 +22,6 @@ private:
 	HWND _hParent;
 	STATE _State;
 	SHAPE _Shape;
-	Color _Color;
 	BOOL _bCapture;
 	HBITMAP _hBitmap;
 
@@ -48,7 +46,6 @@ public:
 	VOID SetType(TYPE NewType) { _Type = NewType; }
 	VOID SetState(STATE NewState) { _State = NewState; }
 	VOID SetShape(SHAPE NewShape) { _Shape = NewShape; }
-	VOID SetColor(Color NewColor) { _Color = NewColor; }
 
 public:
 	VOID SetX(LONG x) { _x = x; }
@@ -62,10 +59,6 @@ public:
 	HWND GetParent() { return _hParent; }
 	STATE GetState() { return _State; }
 	SHAPE GetShape() { return _Shape; }
-
-public:
-	Color GetColor() { return _Color.ToColor(); }
-	COLORREF GetColorRef() { return _Color.ToColorRef(); }
 
 public:
 	LONG GetX() { return _x; }
