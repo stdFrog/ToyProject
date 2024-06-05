@@ -1,23 +1,38 @@
 CC = g++
-
-MAIN = Minesweeper
-OBJS = resource.o Button.o Color.o
-RCRS = $(OBJS : .o=.cpp)
-
-TARGET = $(MAIN)
-all : $(TARGET)
+CPPFLAGS = -W -Wall -I$(HDRDIR)
 
 OPT = -mwindows
-CFLAGS = -W -Wall
-RES = $(MAIN).res
+LDLIBS = -lcomctl32
 
-$(RES) : resource.h $(MAIN).rc
-	windres $(MAIN).rc -O Coff -o $(RES)
+HDRDIR	= Headers
+SRCDIR	= Sources
+RSRCDIR	= Resources
+OBJDIR	= ObjectFiles
+EXEDIR	= bin
 
-$(TARGET) : $(MAIN).cpp $(OBJS) $(RES)
-	$(CC) $(CFLAGS) -o $@ $^ $(OPT) -lcomctl32
+HDRS = $(notdir $(wildcard $(HDRDIR)/*.h))
+SRCS = $(notdir $(wildcard $(SRCDIR)/*.cpp))
+RSRCS = $(notdir $(wildcard $(RSRCDIR)/*.rc))
+OBJS = $(patsubst %.cpp,%.o, $(SRCS))
+
+OUT_OBJS = $(addprefix $(OBJDIR)/, $(OBJS))
+OUT_RSRCS = $(addprefix $(RSRCDIR)/, $(RSRCS))
+OUT_RES = $(join $(OBJDIR)/, $(MAIN).res)
+
+MAIN = Minesweeper
+TARGET = $(EXEDIR)/$(MAIN).exe
+all: $(TARGET)
+
+$(TARGET): $(OUT_OBJS) $(OUT_RES)
+	$(CC) $(CPPFLAGS) -o $@ $^ $(OPT) $(LDLIBS)
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
+	$(CC) -c $^ -o $@
+
+$(OUT_RES): $(OUT_RSRCS)
+	windres $(OUT_RSRCS) -O coff -o $@ -I$(HDRDIR)
 
 clean:
-	del *.res
-	del *.o
-	del *.exe
+	del $(EXEDIR)\*.exe
+	del $(OBJDIR)\*.o
+	del $(OBJDIR)\*.res
