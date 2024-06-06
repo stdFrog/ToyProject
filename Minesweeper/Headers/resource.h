@@ -55,4 +55,7 @@ Button** CreateButton(int w, int h);
 void DestroyButton(Button** Btns);
 BOOL InitializeButton(HWND hWnd, Button** Btns);
 void Resize(WPARAM, Button***);
+
+void OnDrawButtons(HDC);
+void OnMouseButtons(LPARAM, BOOL);
 #endif

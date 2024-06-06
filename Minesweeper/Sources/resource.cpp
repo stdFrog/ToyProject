@@ -98,10 +98,12 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	OnMouseButtons(lParam, TRUE);
 	return 0;
 }
 
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	OnMouseButtons(lParam, FALSE);
 	return 0;
 }
 
@@ -155,6 +157,7 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 
+	OnDrawButtons(hdc);
 	switch(g_GameState){
 		case GAME_BEGIN:
 			break;
@@ -303,4 +306,22 @@ BOOL InitializeButton(HWND hWnd, Button** Btns){
 	}
 
 	return TRUE;
+}
+
+void OnDrawButtons(HDC hDC){
+	for(int i=0; i<sizeof(Buttons)/sizeof(Buttons[0]); i++){
+		for(int j=0; j<sizeof(Buttons[0])/sizeof(Buttons[0][0]); j++){
+			STATE Nums = Buttons[i][j].GetState();
+			Buttons[i][j].OnPaint(hDC, g_hBitmap[Nums]);
+		}
+	}
+}
+
+void OnMouseButtons(LPARAM lParam, BOOL bLeft){
+	LONG x = (int)(short)LOWORD(lParam);
+	LONG y = (int)(short)HIWORD(lParam);
+
+	LONG idx_X = x / 16;
+	LONG idx_Y = y % 16;
+	Buttons[idx_X][idx_Y].OnPressed(lParam, g_hBitmap[Buttons[idx_X][idx_Y].GetState()], bLeft);
 }
