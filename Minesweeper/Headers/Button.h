@@ -25,6 +25,9 @@ private:
 	BOOL _bCapture;
 
 public:
+	HBITMAP *hBitmap[5];
+
+public:
 	VOID DisplayState();
 
 public:
@@ -33,7 +36,7 @@ public:
 	BOOL IsPtOnMe(LONG, LONG);
 
 public:
-	VOID OnPaint(HDC, HBITMAP);
+	VOID OnPaint(HDC);
 	VOID OnPressed(LPARAM, HBITMAP, BOOL bLeft = TRUE);
 
 public:

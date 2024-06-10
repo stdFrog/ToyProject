@@ -85,14 +85,23 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	GetClientRect(hWnd, &g_crt);
 	g_GameState = GAME_PAUSE;
 
+	SetTimer(hWnd, 2, 10, NULL);
 	return 0;
 }
 
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	if(hClientBitmap){DeleteObject(hClientBitmap);}
+	if(g_hBitmap){
+		for(int i=0; i<5; i++){
+			if(g_hBitmap[i]){
+				DeleteObject(g_hBitmap[i]);
+			}
+		}
+	}
 	if(Buttons){DestroyButton(Buttons);}
 
 	KillTimer(hWnd, 1);
+	KillTimer(hWnd, 2);
 	PostQuitMessage(0);
 	return 0;
 }
@@ -156,19 +165,9 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
-
-	OnDrawButtons(hdc);
-	switch(g_GameState){
-		case GAME_BEGIN:
-			break;
-
-		case GAME_PAUSE:
-			break;
-
-		case GAME_END:
-			break;
+	if(hClientBitmap){
+		DrawBitmap(hdc, 0,0, hClientBitmap);
 	}
-
 	EndPaint(hWnd, &ps);
 	return 0;
 }
@@ -183,6 +182,26 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 					g_Time = 0;
 					KillTimer(hWnd, 1);
 				}
+			}
+			break;
+
+		case 2:
+			{
+				HDC hDC = GetDC(hWnd);
+				HDC hMemDC = CreateCompatibleDC(hDC);
+				if(hClientBitmap == NULL){
+					GetClientRect(hWnd, &g_crt);
+					hClientBitmap = CreateCompatibleBitmap(hDC, g_crt.right, g_crt.bottom);
+				}
+				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
+				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
+
+				/* TODO : Display */
+				OnDrawButtons(hMemDC);
+
+				SelectObject(hMemDC, hOld);
+				DeleteDC(hMemDC);
+				ReleaseDC(hWnd, hDC);
 			}
 			break;
 	}
@@ -294,6 +313,15 @@ void Resize(WPARAM wParam, Button*** Btns){
 	(*Btns) = CreateButton(Table[Index].x, Table[Index].y);
 }
 
+/*
+	리소스를 아끼고자 한다면 아래와 같이 포인터 배열로부터 데이터를 읽어들일 수 있다.
+
+	다만, 비허가 접근(Access Violation)이 발생할 위험이 있는데(동적 할당 등),
+	현재는 해당사항이 없으므로 아래와 같이 작성하기로 한다.
+
+	지난번 수정에서 여러 상황을 고려하지 않아 구조가 엉망진창이므로
+	여유가 생길 때 틈틈히 코드를 수정하기로 한다.
+*/
 BOOL InitializeButton(HWND hWnd, Button** Btns){
 	for(int i=0; i<Table[Index].y; i++){
 		for(int j=0; j<Table[Index].x; j++){
@@ -302,6 +330,11 @@ BOOL InitializeButton(HWND hWnd, Button** Btns){
 			Btns[i][j].SetY(i * 16);
 			Btns[i][j].SetWidth(16);
 			Btns[i][j].SetHeight(16);
+			Btns[i][j].hBitmap[0] = &g_hBitmap[0];
+			Btns[i][j].hBitmap[1] = &g_hBitmap[1];
+			Btns[i][j].hBitmap[2] = &g_hBitmap[2];
+			Btns[i][j].hBitmap[3] = &g_hBitmap[3];
+			Btns[i][j].hBitmap[4] = &g_hBitmap[4];
 		}
 	}
 
@@ -311,8 +344,7 @@ BOOL InitializeButton(HWND hWnd, Button** Btns){
 void OnDrawButtons(HDC hDC){
 	for(int i=0; i<sizeof(Buttons)/sizeof(Buttons[0]); i++){
 		for(int j=0; j<sizeof(Buttons[0])/sizeof(Buttons[0][0]); j++){
-			STATE Nums = Buttons[i][j].GetState();
-			Buttons[i][j].OnPaint(hDC, g_hBitmap[Nums]);
+			Buttons[i][j].OnPaint(hDC);
 		}
 	}
 }
