@@ -1,16 +1,10 @@
 #ifndef __BUTTON_H_
 #define __BUTTON_H_
-
-/*
-	확장을 고려하여 여러 스타일의 열거형 타입을 만들어뒀으나 굳이 이럴 필요 없으므로 추후 수정하기로 한다.
-	또한, 멤버 변수와 함수, 초기화 방식도 수정이 필요하다.
-*/
-
 #define IDW_BUTTON 0
 
 typedef enum { PUSH, CHECK, RADIO } TYPE;
 typedef enum { CIRCLE, TRIANGLE, RECTANGLE } SHAPE;
-typedef enum { NORMAL, ONE, TWO, THREE, PRESSED } STATE;
+typedef enum { NORMAL, ONE, TWO, THREE, PRESS, PRESSED, BLOCK, HOT } STATE;
 
 class Button {
 	static UINT ButtonCount;
@@ -22,26 +16,25 @@ private:
 	HWND _hParent;
 	STATE _State;
 	SHAPE _Shape;
-	BOOL _bCapture;
+	BOOL _bCapture, _bTimer;
 
 public:
-	HBITMAP *hBitmap[5];
+	HBITMAP hBitmap[5];
 
 public:
-	VOID DisplayState();
-
-public:
-	VOID DrawBitmap(HDC, HBITMAP);
+	VOID DrawBitmap(HDC);
 	BOOL IsPtOnMe(POINT);
 	BOOL IsPtOnMe(LONG, LONG);
 
 public:
 	VOID OnPaint(HDC);
-	VOID OnPressed(LPARAM, HBITMAP, BOOL bLeft = TRUE);
+	VOID OnPressed(LPARAM, BOOL bLeft = TRUE);
+	VOID OnReleased(BOOL bLeft = TRUE);
+	VOID OnMove(LPARAM, BOOL bLeft = TRUE);
 
 public:
 	VOID ChangeParent(HWND hNewParent) { _hParent = hNewParent; }
-	VOID ChangeState(STATE CurrentState, HBITMAP hBitmap) { _State = CurrentState; DrawBitmap(NULL, hBitmap); }
+	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL, hBitmap[_State]); }
 public:
 	VOID SetID(UINT NewID) { _ID = NewID; }
 	VOID SetType(TYPE NewType) { _Type = NewType; }
