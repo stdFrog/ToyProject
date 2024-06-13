@@ -19,7 +19,7 @@ private:
 	BOOL _bCapture, _bTimer;
 
 public:
-	HBITMAP hBitmap[5];
+	HBITMAP _hBitmap[5];
 
 public:
 	VOID DrawBitmap(HDC);
@@ -34,7 +34,7 @@ public:
 
 public:
 	VOID ChangeParent(HWND hNewParent) { _hParent = hNewParent; }
-	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL, hBitmap[_State]); }
+	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL); }
 public:
 	VOID SetID(UINT NewID) { _ID = NewID; }
 	VOID SetType(TYPE NewType) { _Type = NewType; }

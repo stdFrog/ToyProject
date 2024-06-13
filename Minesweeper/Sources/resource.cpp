@@ -330,11 +330,11 @@ BOOL InitializeButton(HWND hWnd, Button** Btns){
 			Btns[i][j].SetY(i * 16);
 			Btns[i][j].SetWidth(16);
 			Btns[i][j].SetHeight(16);
-			Btns[i][j].hBitmap[0] = &g_hBitmap[0];
-			Btns[i][j].hBitmap[1] = &g_hBitmap[1];
-			Btns[i][j].hBitmap[2] = &g_hBitmap[2];
-			Btns[i][j].hBitmap[3] = &g_hBitmap[3];
-			Btns[i][j].hBitmap[4] = &g_hBitmap[4];
+			Btns[i][j]._hBitmap[0] = g_hBitmap[0];
+			Btns[i][j]._hBitmap[1] = g_hBitmap[1];
+			Btns[i][j]._hBitmap[2] = g_hBitmap[2];
+			Btns[i][j]._hBitmap[3] = g_hBitmap[3];
+			Btns[i][j]._hBitmap[4] = g_hBitmap[4];
 		}
 	}
 
@@ -355,5 +355,5 @@ void OnMouseButtons(LPARAM lParam, BOOL bLeft){
 
 	LONG idx_X = x / 16;
 	LONG idx_Y = y % 16;
-	Buttons[idx_X][idx_Y].OnPressed(lParam, g_hBitmap[Buttons[idx_X][idx_Y].GetState()], bLeft);
+	Buttons[idx_X][idx_Y].OnPressed(lParam, bLeft);
 }

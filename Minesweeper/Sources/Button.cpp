@@ -7,12 +7,16 @@ VOID Button::OnPaint(HDC hDC){
 	DrawBitmap(hDC);
 }
 
-VOID OnPressed(LPARAM lParam, BOOL bLeft){
+VOID Button::OnPressed(LPARAM lParam, BOOL bLeft){
 	if(_State != NORMAL && _State != BLOCK){return;}
 
 	if(IsPtOnMe(LOWORD(lParam), HIWORD(lParam))){
 		if(bLeft){
-			((_State == NORMAL) ? : (ChangeState(PRESS)) : (ChangeState(NORMAL)));
+			if(_State == NORMAL){
+				ChangeState(PRESS);
+			}else{
+				ChangeState(NORMAL);
+			}
 		}
 
 		SetCapture(_hParent);
@@ -20,7 +24,7 @@ VOID OnPressed(LPARAM lParam, BOOL bLeft){
 	}
 }
 
-VOID Button::OnRelease(BOOL bLeft){
+VOID Button::OnReleased(BOOL bLeft){
 	if(!_bCapture){return;}
 
 	ReleaseCapture();
@@ -28,7 +32,7 @@ VOID Button::OnRelease(BOOL bLeft){
  
 	POINT pt;
 	GetCursorPos(&pt);
-	ScreenToClient(_hParent, pt);
+	ScreenToClient(_hParent, &pt);
 
 	if(IsPtOnMe(pt)){
 		if(bLeft){
@@ -41,7 +45,7 @@ VOID Button::OnRelease(BOOL bLeft){
 	}
 }
 
-VOID OnMove(LPARAM lParam, BOOL bLeft){
+VOID Button::OnMove(LPARAM lParam, BOOL bLeft){
 	LONG x = (LONG)(WORD)LOWORD(lParam);
 	LONG y = (LONG)(WORD)HIWORD(lParam);
 
@@ -55,9 +59,9 @@ VOID OnMove(LPARAM lParam, BOOL bLeft){
 		}
 	}else{
 		HWND hParent;
-		for(hParent = _hParent; GetParent(hParent); hParent = GetParent(hParent)){;}
+		for(hParent = _hParent; ::GetParent(hParent); hParent = ::GetParent(hParent)){;}
 
-		if(GetForegroundWindow() != hparent){return;}
+		if(GetForegroundWindow() != hParent){return;}
 
 		/* 캡처한 프로그램이 없고 내 자신 위에 있을 때 */
 		if(GetCapture() == NULL && IsPtOnMe(x,y)){
@@ -88,11 +92,8 @@ VOID Button::DrawBitmap(HDC hDC){
 		hDC = GetDC(_hParent);
 	}
 
-	BITMAP bmp;
-	GetObject(hBitmap, sizeof(BITMAP), &bmp);
-
 	HDC hMemDC = CreateCompatibleDC(hDC);
-	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap[_State]);
+	HGDIOBJ hOld = SelectObject(hMemDC, _hBitmap[_State]);
 	BitBlt(hDC, _x,_y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
