@@ -60,6 +60,9 @@ MSGMAP mainmsg[] = {
 	{WM_SYSCOMMAND, OnSysCommand},
 	{WM_LBUTTONDOWN, OnLButtonDown},
 	{WM_RBUTTONDOWN, OnRButtonDown},
+	{WM_LBUTTONUP, OnLButtonUp},
+	{WM_RBUTTONUP, OnRButtonUp},
+	{WM_MOUSEMOVE, OnMouseMove},
 	{WM_CREATE, OnCreate},
 	{WM_DESTROY, OnDestroy},
 };

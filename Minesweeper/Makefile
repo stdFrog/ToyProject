@@ -17,7 +17,7 @@ OBJS = $(patsubst %.cpp,%.o, $(SRCS))
 
 OUT_OBJS = $(addprefix $(OBJDIR)/, $(OBJS))
 OUT_RSRCS = $(addprefix $(RSRCDIR)/, $(RSRCS))
-OUT_RES = $(join $(OBJDIR)/, $(MAIN).res)
+OUT_RES = $(join $(RSRCDIR)/, $(MAIN).res)
 
 MAIN = Minesweeper
 TARGET = $(EXEDIR)/$(MAIN).exe
@@ -35,4 +35,4 @@ $(OUT_RES): $(OUT_RSRCS)
 clean:
 	del $(EXEDIR)\*.exe
 	del $(OBJDIR)\*.o
-	del $(OBJDIR)\*.res
+	del $(RSRCDIR)\*.res

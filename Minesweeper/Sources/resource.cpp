@@ -32,9 +32,9 @@ UINT_PTR Index;
 UINT_PTR g_Time;
 
 int Bomb;
-Button** Buttons = NULL;
 GAME_STATE g_GameState;
 HBITMAP g_hBitmap[5];
+Button** Btns = NULL;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -66,7 +66,7 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	g_hBitmap[1] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_ONE));
 	g_hBitmap[2] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_TWO));
 	g_hBitmap[3] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_THREE));
-	g_hBitmap[5] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_PRESSED));
+	g_hBitmap[4] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_PRESSED));
 
 	InitCommonControls();
 	// hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
@@ -79,13 +79,10 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	Bomb = 0;
 	Index = 0;
 	SetClientRect(hWnd, TILE_SIZE * Table[Index].x, TILE_SIZE * Table[Index].y + (g_trt.bottom - g_trt.top));
-	Buttons = CreateButton(Table[Index].x, Table[Index].y);
-	InitializeButton(hWnd, Buttons);
-
 	GetClientRect(hWnd, &g_crt);
 	g_GameState = GAME_PAUSE;
 
-	SetTimer(hWnd, 2, 10, NULL);
+	SetTimer(hWnd, 0, 10, NULL);
 	return 0;
 }
 
@@ -98,21 +95,38 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			}
 		}
 	}
-	if(Buttons){DestroyButton(Buttons);}
+	if(Btns){DestroyButtons(Btns, Table[Index].x, Table[Index].y);}
 
+	KillTimer(hWnd, 0);
 	KillTimer(hWnd, 1);
-	KillTimer(hWnd, 2);
 	PostQuitMessage(0);
 	return 0;
 }
 
+
+
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnMouseButtons(lParam, TRUE);
+	OnPressedButtons(lParam, TRUE, Btns, Table[Index].x, Table[Index].y);
 	return 0;
 }
 
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnMouseButtons(lParam, FALSE);
+	OnPressedButtons(lParam, FALSE, Btns, Table[Index].x, Table[Index].y);
+	return 0;
+}
+
+LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	OnReleasedButtons(TRUE, Btns, Table[Index].x, Table[Index].y);
+	return 0;
+}
+
+LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	OnReleasedButtons(FALSE, Btns, Table[Index].x, Table[Index].y);
+	return 0;
+}
+
+LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	OnMoveButtons(lParam, Btns, Table[Index].x, Table[Index].y);
 	return 0;
 }
 
@@ -134,7 +148,7 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			if(LOWORD(PrevCommand) != LOWORD(wParam)){
 				PrevCommand = wParam;
 				CheckMenuRadioItem(hPopupSize, ID_SYS_RESIZE1, ID_SYS_RESIZE3, LOWORD(wParam), MF_BYCOMMAND);
-				Resize(wParam, &Buttons);
+				// TODO : Replace Map
 			}
 			return 0;
 
@@ -165,15 +179,23 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
-	if(hClientBitmap){
-		DrawBitmap(hdc, 0,0, hClientBitmap);
-	}
 	EndPaint(hWnd, &ps);
 	return 0;
 }
 
 LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	RECT srt;
+
 	switch(wParam){
+		case 0:
+			{
+				KillTimer(hWnd, 0);
+				Btns = CreateButtons(Table[Index].x, Table[Index].y);
+				InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
+				InvalidateRect(hWnd, NULL, TRUE);
+			}
+			break;
+
 		case 1:
 			{
 				if(g_GameState == GAME_BEGIN){
@@ -182,26 +204,6 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 					g_Time = 0;
 					KillTimer(hWnd, 1);
 				}
-			}
-			break;
-
-		case 2:
-			{
-				HDC hDC = GetDC(hWnd);
-				HDC hMemDC = CreateCompatibleDC(hDC);
-				if(hClientBitmap == NULL){
-					GetClientRect(hWnd, &g_crt);
-					hClientBitmap = CreateCompatibleBitmap(hDC, g_crt.right, g_crt.bottom);
-				}
-				HGDIOBJ hOld = SelectObject(hMemDC, hClientBitmap);
-				FillRect(hMemDC, &g_crt, GetSysColorBrush(COLOR_WINDOW));
-
-				/* TODO : Display */
-				OnDrawButtons(hMemDC);
-
-				SelectObject(hMemDC, hOld);
-				DeleteDC(hMemDC);
-				ReleaseDC(hWnd, hDC);
 			}
 			break;
 	}
@@ -246,7 +248,7 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	BITMAP bmp;
 	GetObject(hBitmap, sizeof(BITMAP), &bmp);
 
-	BitBlt(hDC, X,Y, bmp.bmWidth, bmp.bmHeight, hMemDC, X,Y, SRCCOPY);
+	BitBlt(hDC, X,Y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
@@ -278,82 +280,61 @@ void SetStatusText(HWND hWnd){
 	SendMessage(hStatusWnd, SB_SETTEXT, 2, (LPARAM)Info);
 }
 
-Button** CreateButton(int w, int h){
-	Button** Btns = new Button*[h];
-	for(int i=0; i<h; i++){
-		Btns[i] = new Button[w];
+Button** CreateButtons(int W, int H){
+	Button **Btns = new Button*[H];
+	for(int i=0; i<H; i++){
+		Btns[i] = new Button[W];
 	}
 
 	return Btns;
 }
 
-void DestroyButton(Button** Btns){
-	if(Btns == NULL){return;}
-
-	for(int i=0; i<Table[Index].y; i++){
-		delete [] Btns[i];
-	}
-
-	delete [] Btns;
-
-	Btns = NULL;
-}
-
-void Resize(WPARAM wParam, Button*** Btns){
-	if((*Btns) != NULL) { DestroyButton(*Btns); }
-
-	UINT_PTR ID = 0;
-	for(ID = ID_SYS_RESIZE1; ID <= ID_SYS_RESIZE3; ID++){
-		if(ID == LOWORD(wParam)){ break; }
-	}
-
-	ID &= ~ID_SYS_ABOUT;
-	Index = ID - 2;				// 상수값(2) : define Macro Resize ID Starting Number(2)
-
-	(*Btns) = CreateButton(Table[Index].x, Table[Index].y);
-}
-
-/*
-	리소스를 아끼고자 한다면 아래와 같이 포인터 배열로부터 데이터를 읽어들일 수 있다.
-
-	다만, 비허가 접근(Access Violation)이 발생할 위험이 있는데(동적 할당 등),
-	현재는 해당사항이 없으므로 아래와 같이 작성하기로 한다.
-
-	지난번 수정에서 여러 상황을 고려하지 않아 구조가 엉망진창이므로
-	여유가 생길 때 틈틈히 코드를 수정하기로 한다.
-*/
-BOOL InitializeButton(HWND hWnd, Button** Btns){
-	for(int i=0; i<Table[Index].y; i++){
-		for(int j=0; j<Table[Index].x; j++){
-			Btns[i][j].ChangeParent(hWnd);
-			Btns[i][j].SetX(j * 16);
-			Btns[i][j].SetY(i * 16);
-			Btns[i][j].SetWidth(16);
-			Btns[i][j].SetHeight(16);
-			Btns[i][j]._hBitmap[0] = g_hBitmap[0];
-			Btns[i][j]._hBitmap[1] = g_hBitmap[1];
-			Btns[i][j]._hBitmap[2] = g_hBitmap[2];
-			Btns[i][j]._hBitmap[3] = g_hBitmap[3];
-			Btns[i][j]._hBitmap[4] = g_hBitmap[4];
-		}
-	}
-
-	return TRUE;
-}
-
-void OnDrawButtons(HDC hDC){
-	for(int i=0; i<sizeof(Buttons)/sizeof(Buttons[0]); i++){
-		for(int j=0; j<sizeof(Buttons[0])/sizeof(Buttons[0][0]); j++){
-			Buttons[i][j].OnPaint(hDC);
+void InitButtons(HWND hWnd, Button** Btns, int W, int H){
+	for(int i=0; i<H; i++){
+		for(int j=0; j<W; j++){
+			Btns[i][j].SetParent(hWnd);
+			Btns[i][j].SetX(j * TILE_SIZE);
+			Btns[i][j].SetY(i * TILE_SIZE);
+			Btns[i][j].SetBitmap(g_hBitmap);
 		}
 	}
 }
 
-void OnMouseButtons(LPARAM lParam, BOOL bLeft){
-	LONG x = (int)(short)LOWORD(lParam);
-	LONG y = (int)(short)HIWORD(lParam);
+void DestroyButtons(Button** Target, int W, int H){
+	for(int i=0; i<H; i++){
+		delete [] Target[i];
+	}
+	delete [] Target;
+}
 
-	LONG idx_X = x / 16;
-	LONG idx_Y = y % 16;
-	Buttons[idx_X][idx_Y].OnPressed(lParam, bLeft);
+void OnDrawButtons(HDC hdc, Button** Btns, int W, int H){
+	for(int i=0; i<H; i++){
+		for(int j=0; j<W; j++){
+			Btns[i][j].OnPaint(hdc);
+		}
+	}
+}
+
+void OnPressedButtons(LPARAM lParam, BOOL bLeft, Button** Btns, int W, int H){
+	for(int i=0; i<H; i++){
+		for(int j=0; j<W; j++){
+			Btns[i][j].OnPressed(lParam, bLeft);
+		}
+	}
+}
+
+void OnReleasedButtons(BOOL bLeft, Button** Btns, int W, int H){
+	for(int i=0; i<H; i++){
+		for(int j=0; j<W; j++){
+			Btns[i][j].OnReleased(bLeft);
+		}
+	}
+}
+
+void OnMoveButtons(LPARAM lParam, Button** Btns, int W, int H){
+	for(int i=0; i<H; i++){
+		for(int j=0; j<W; j++){
+			Btns[i][j].OnMove(lParam);
+		}
+	}
 }

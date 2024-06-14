@@ -10,6 +10,7 @@ VOID Button::OnPaint(HDC hDC){
 VOID Button::OnPressed(LPARAM lParam, BOOL bLeft){
 	if(_State != NORMAL && _State != BLOCK){return;}
 
+	_bLeft = bLeft;
 	if(IsPtOnMe(LOWORD(lParam), HIWORD(lParam))){
 		if(bLeft){
 			if(_State == NORMAL){
@@ -45,13 +46,13 @@ VOID Button::OnReleased(BOOL bLeft){
 	}
 }
 
-VOID Button::OnMove(LPARAM lParam, BOOL bLeft){
+VOID Button::OnMove(LPARAM lParam){
 	LONG x = (LONG)(WORD)LOWORD(lParam);
 	LONG y = (LONG)(WORD)HIWORD(lParam);
 
 	if(_bCapture){
 		if(IsPtOnMe(x, y)){
-			if(bLeft){
+			if(_bLeft){
 				ChangeState(PRESS);
 			}
 		}else{
