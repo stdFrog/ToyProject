@@ -82,7 +82,9 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	GetClientRect(hWnd, &g_crt);
 	g_GameState = GAME_PAUSE;
 
-	SetTimer(hWnd, 0, 10, NULL);
+	Btns = CreateButtons(Table[Index].x, Table[Index].y);
+	InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
+
 	return 0;
 }
 
@@ -97,7 +99,6 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 	if(Btns){DestroyButtons(Btns, Table[Index].x, Table[Index].y);}
 
-	KillTimer(hWnd, 0);
 	KillTimer(hWnd, 1);
 	PostQuitMessage(0);
 	return 0;
@@ -158,6 +159,7 @@ LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	MSG msg = {0};
 	INT Part[3];
 
 	if(wParam != SIZE_MINIMIZED) {
@@ -179,6 +181,7 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
+	OnDrawButtons(hdc, Btns, Table[Index].x, Table[Index].y);
 	EndPaint(hWnd, &ps);
 	return 0;
 }
@@ -187,15 +190,6 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	RECT srt;
 
 	switch(wParam){
-		case 0:
-			{
-				KillTimer(hWnd, 0);
-				Btns = CreateButtons(Table[Index].x, Table[Index].y);
-				InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
-				InvalidateRect(hWnd, NULL, TRUE);
-			}
-			break;
-
 		case 1:
 			{
 				if(g_GameState == GAME_BEGIN){
@@ -307,20 +301,41 @@ void DestroyButtons(Button** Target, int W, int H){
 	delete [] Target;
 }
 
+/*
+	버튼을 그리는 도중 발생하는 일련의 메시지에 대하여
+	교착 상태가 발생할 수 있으므로 메시지 펌프를 활용한다.
+*/
 void OnDrawButtons(HDC hdc, Button** Btns, int W, int H){
+	MSG msg = {0};
+
 	for(int i=0; i<H; i++){
 		for(int j=0; j<W; j++){
+			while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+				if(msg.message == WM_QUIT){
+					PostQuitMessage(0);
+				}
+
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+
 			Btns[i][j].OnPaint(hdc);
 		}
 	}
 }
 
+/* 
+	현재 구조로 테스트해 본 결과,
+	반응이 느리고 재진입 허가 상태이므로 단순 이중 for문 구조가 아닌
+	화면 좌표값으로부터 배열 첨자를 계산하는 구조로 변경되어야 한다.
+*/
 void OnPressedButtons(LPARAM lParam, BOOL bLeft, Button** Btns, int W, int H){
 	for(int i=0; i<H; i++){
 		for(int j=0; j<W; j++){
-			Btns[i][j].OnPressed(lParam, bLeft);
+			Btns[i][j].OnReleased(bLeft);
 		}
 	}
+
 }
 
 void OnReleasedButtons(BOOL bLeft, Button** Btns, int W, int H){
@@ -332,8 +347,19 @@ void OnReleasedButtons(BOOL bLeft, Button** Btns, int W, int H){
 }
 
 void OnMoveButtons(LPARAM lParam, Button** Btns, int W, int H){
+	MSG msg = {0};
+
 	for(int i=0; i<H; i++){
 		for(int j=0; j<W; j++){
+			while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+				if(msg.message == WM_QUIT){
+					PostQuitMessage(0);
+				}
+
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+
 			Btns[i][j].OnMove(lParam);
 		}
 	}

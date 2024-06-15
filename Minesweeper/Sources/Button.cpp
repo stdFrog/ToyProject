@@ -15,6 +15,7 @@ VOID Button::OnPressed(LPARAM lParam, BOOL bLeft){
 		if(bLeft){
 			if(_State == NORMAL){
 				ChangeState(PRESS);
+				MessageBox(NULL, TEXT("Test"), TEXT(""), MB_OK);
 			}else{
 				ChangeState(NORMAL);
 			}
