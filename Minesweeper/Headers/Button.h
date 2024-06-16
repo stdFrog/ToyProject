@@ -4,7 +4,7 @@
 
 typedef enum { PUSH, CHECK, RADIO } TYPE;
 typedef enum { CIRCLE, TRIANGLE, RECTANGLE } SHAPE;
-typedef enum { NORMAL, ONE, TWO, THREE, PRESS, PRESSED, BLOCK, HOT } STATE;
+typedef enum { NORMAL, ONE, TWO, THREE, PRESS, PRESSING, BLOCK, HOT } STATE;
 
 class Button {
 	static UINT ButtonCount;
@@ -28,9 +28,9 @@ public:
 
 public:
 	VOID OnPaint(HDC);
-	VOID OnPressed(LPARAM, BOOL bLeft = TRUE);
-	VOID OnReleased(BOOL bLeft = TRUE);
-	VOID OnMove(LPARAM);
+	VOID OnLPressed();
+	VOID OnRPressed();
+	VOID OnReleased();
 
 public:
 	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL); }
@@ -60,6 +60,7 @@ public:
 	HWND GetParent() { return _hParent; }
 	STATE GetState() { return _State; }
 	SHAPE GetShape() { return _Shape; }
+	BOOL IsCapture() { return _bCapture;}
 
 public:
 	LONG GetX() { return _x; }

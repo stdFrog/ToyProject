@@ -104,30 +104,38 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
-
-
+UINT g_ix, g_iy;
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnPressedButtons(lParam, TRUE, Btns, Table[Index].x, Table[Index].y);
+	GetIndex(lParam, &g_ix, &g_iy);
+	Btns[g_iy][g_ix].OnLPressed();
 	return 0;
 }
 
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnPressedButtons(lParam, FALSE, Btns, Table[Index].x, Table[Index].y);
+	GetIndex(lParam, &g_ix, &g_iy);
+	Btns[g_iy][g_ix].OnRPressed();
 	return 0;
 }
 
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnReleasedButtons(TRUE, Btns, Table[Index].x, Table[Index].y);
-	return 0;
-}
-
-LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnReleasedButtons(FALSE, Btns, Table[Index].x, Table[Index].y);
+	Btns[g_iy][g_ix].OnReleased();
 	return 0;
 }
 
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	OnMoveButtons(lParam, Btns, Table[Index].x, Table[Index].y);
+	/*
+	if(GetForegroundWindow() != hWnd){return 0;}
+
+	static UINT pix = -1, piy = -1;
+	UINT ix, iy;
+	GetIndex(lParam, &ix, &iy);
+
+	if(GetCapture() == hWnd){
+		Btns[iy][ix].ChangeState(PRESS);
+	}else if(GetCapture() == NULL){
+		Btns[iy][ix].ChangeState(HOT);
+	}
+	*/
 	return 0;
 }
 
@@ -190,6 +198,11 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	RECT srt;
 
 	switch(wParam){
+		case 0:
+			{
+				
+			}
+			break;
 		case 1:
 			{
 				if(g_GameState == GAME_BEGIN){
@@ -329,38 +342,11 @@ void OnDrawButtons(HDC hdc, Button** Btns, int W, int H){
 	반응이 느리고 재진입 허가 상태이므로 단순 이중 for문 구조가 아닌
 	화면 좌표값으로부터 배열 첨자를 계산하는 구조로 변경되어야 한다.
 */
-void OnPressedButtons(LPARAM lParam, BOOL bLeft, Button** Btns, int W, int H){
-	for(int i=0; i<H; i++){
-		for(int j=0; j<W; j++){
-			Btns[i][j].OnReleased(bLeft);
-		}
-	}
 
-}
+void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
+	LONG x = (LONG)(WORD)LOWORD(lParam);
+	LONG y = (LONG)(WORD)HIWORD(lParam);
 
-void OnReleasedButtons(BOOL bLeft, Button** Btns, int W, int H){
-	for(int i=0; i<H; i++){
-		for(int j=0; j<W; j++){
-			Btns[i][j].OnReleased(bLeft);
-		}
-	}
-}
-
-void OnMoveButtons(LPARAM lParam, Button** Btns, int W, int H){
-	MSG msg = {0};
-
-	for(int i=0; i<H; i++){
-		for(int j=0; j<W; j++){
-			while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
-				if(msg.message == WM_QUIT){
-					PostQuitMessage(0);
-				}
-
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-
-			Btns[i][j].OnMove(lParam);
-		}
-	}
+	*ix = x / TILE_SIZE;
+	*iy = y / TILE_SIZE;
 }

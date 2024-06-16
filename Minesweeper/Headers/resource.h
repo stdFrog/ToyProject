@@ -42,7 +42,6 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnRButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
@@ -58,7 +57,5 @@ Button** CreateButtons(int W, int H);
 void InitButtons(HWND hWnd, Button** Btns, int W, int H);
 void DestroyButtons(Button** Target, int W, int H);
 void OnDrawButtons(HDC hdc, Button** Btns, int W, int H);
-void OnPressedButtons(LPARAM lParam, BOOL bLeft, Button** Btns, int W, int H);
-void OnReleasedButtons(BOOL bLeft, Button** Btns, int W, int H);
-void OnMoveButtons(LPARAM lParam, Button** Btns, int W, int H);
+void GetIndex(LPARAM, UINT*, UINT*);
 #endif

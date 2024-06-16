@@ -7,26 +7,24 @@ VOID Button::OnPaint(HDC hDC){
 	DrawBitmap(hDC);
 }
 
-VOID Button::OnPressed(LPARAM lParam, BOOL bLeft){
-	if(_State != NORMAL && _State != BLOCK){return;}
+VOID Button::OnLPressed(){
+	if(_State != NORMAL){return;}
 
-	_bLeft = bLeft;
-	if(IsPtOnMe(LOWORD(lParam), HIWORD(lParam))){
-		if(bLeft){
-			if(_State == NORMAL){
-				ChangeState(PRESS);
-				MessageBox(NULL, TEXT("Test"), TEXT(""), MB_OK);
-			}else{
-				ChangeState(NORMAL);
-			}
-		}
+	ChangeState(PRESSING);
 
+	if(GetCapture() == NULL){
 		SetCapture(_hParent);
 		_bCapture = TRUE;
 	}
 }
 
-VOID Button::OnReleased(BOOL bLeft){
+VOID Button::OnRPressed(){
+	if(_State != NORMAL && _State != BLOCK){return;}
+	ChangeState((_State == NORMAL) ? (BLOCK) : (NORMAL));
+}
+
+
+VOID Button::OnReleased(){
 	if(!_bCapture){return;}
 
 	ReleaseCapture();
@@ -36,42 +34,8 @@ VOID Button::OnReleased(BOOL bLeft){
 	GetCursorPos(&pt);
 	ScreenToClient(_hParent, &pt);
 
-	if(IsPtOnMe(pt)){
-		if(bLeft){
-			ChangeState(PRESS);
-			/* TODO : 주변 8칸 탐색, 비어있는 칸 활성 상태로 변환 */
-
-		}else{
-			ChangeState(BLOCK);
-		}
-	}
-}
-
-VOID Button::OnMove(LPARAM lParam){
-	LONG x = (LONG)(WORD)LOWORD(lParam);
-	LONG y = (LONG)(WORD)HIWORD(lParam);
-
-	if(_bCapture){
-		if(IsPtOnMe(x, y)){
-			if(_bLeft){
-				ChangeState(PRESS);
-			}
-		}else{
-			ChangeState(NORMAL);
-		}
-	}else{
-		HWND hParent;
-		for(hParent = _hParent; ::GetParent(hParent); hParent = ::GetParent(hParent)){;}
-
-		if(GetForegroundWindow() != hParent){return;}
-
-		/* 캡처한 프로그램이 없고 내 자신 위에 있을 때 */
-		if(GetCapture() == NULL && IsPtOnMe(x,y)){
-			SetTimer(hParent, 3, 50, NULL);
-			_bTimer = TRUE;
-			ChangeState(HOT);
-		}
-	}
+	ChangeState((IsPtOnMe(pt)) ? (PRESS) : (NORMAL));
+	/* TODO : 주변 8칸 탐색, 비어있는 칸 활성 상태로 변환 */
 }
 
 BOOL Button::IsPtOnMe(POINT pt){
