@@ -97,7 +97,12 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	Btns = CreateButtons(Table[Index].x, Table[Index].y);
 	InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
 	RandomizeSet();
-	ExploreSurround();
+	/* TODO : 
+		ExploreSurround 함수 개선하고 Active 메세지 쪽으로 이동
+		
+		주위 탐색용 함수가 2개 필요한데, ExploreSurroud를 기존과 달리 EMPTY DATA를 찾는 용도로 수정
+		DataSet 따위의 이름으로 함수 하나 만들고 지금처럼 지뢰 주변 8칸 탐색해서 지뢰 개수 카운팅
+	*/
 		
 	return 0;
 }
@@ -317,7 +322,7 @@ void RandomizeSet(){
 	int Row = Table[Index].x;
 	int Col = Table[Index].y;
 
-	while(MINECNT-- > 0){
+	while(MINECNT > 0){
 		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
 			if(msg.message == WM_QUIT){
 				PostQuitMessage(0);
@@ -338,6 +343,7 @@ void RandomizeSet(){
 				Q = CreateQueue();
 			}
 			Enqueue(Q, CreateNode(r,c));
+			MINECNT--;
 		}
 	}
 }
@@ -375,10 +381,6 @@ void ExploreSurround(){
 
 	while(!IsEmpty(Q)){
 		Node* Popped = Dequeue(Q);
-
-		TCHAR Debug[256];
-		wsprintf(Debug, TEXT("Popped: x = %d, y = %d"), Popped->x, Popped->y);
-		MessageBox(HWND_DESKTOP, Debug, TEXT(""), MB_OK);
 
 		for(int i=0; i<8; i++){
 			int x = Popped->x + dx[i];
