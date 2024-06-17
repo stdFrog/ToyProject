@@ -4,7 +4,8 @@
 
 typedef enum { PUSH, CHECK, RADIO } TYPE;
 typedef enum { CIRCLE, TRIANGLE, RECTANGLE } SHAPE;
-typedef enum { NORMAL, ONE, TWO, THREE, PRESS, PRESSING, BLOCK, HOT } STATE;
+typedef enum { NORMAL, PRESS, PRESSING, BLOCK, HOT, STATE_LAST_COUNT } STATE;
+typedef enum { EMPTY, MINE, ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, DATA_LAST_COUNT } DATA;
 
 class Button {
 	static UINT ButtonCount;
@@ -14,12 +15,27 @@ private:
 	LONG _x, _y, _Width, _Height;
 	UINT _ID;
 	HWND _hParent;
+	DATA _Data;
 	STATE _State;
 	SHAPE _Shape;
 	BOOL _bCapture, _bTimer, _bLeft;
 
 public:
-	HBITMAP _hBitmap[5];
+	HBITMAP _hBitmapData[DATA_LAST_COUNT];
+	HBITMAP _hBitmapState[STATE_LAST_COUNT];
+	VOID DeleteBitmap(){
+		for(int i=0; i<DATA_LAST_COUNT; i++){
+			if(_hBitmapData[i]){
+				DeleteObject(_hBitmapData[i]);
+			}
+		}
+
+		for(int j=0; j<STATE_LAST_COUNT; j++){
+			if(_hBitmapState[j]){
+				DeleteObject(_hBitmapState[j]);
+			}
+		}
+	}
 
 public:
 	VOID DrawBitmap(HDC);
@@ -40,12 +56,18 @@ public:
 	VOID SetState(STATE NewState) { _State = NewState; }
 	VOID SetShape(SHAPE NewShape) { _Shape = NewShape; }
 	VOID SetParent(HWND hNewParent) { _hParent = hNewParent; }
-	VOID SetBitmap(HBITMAP* hBmps) {
-		_hBitmap[0] = hBmps[0];
-		_hBitmap[1] = hBmps[1];
-		_hBitmap[2] = hBmps[2];
-		_hBitmap[3] = hBmps[3];
-		_hBitmap[4] = hBmps[4];
+	VOID SetBitmap(HBITMAP* hBitmapData, HBITMAP* hBitmapState) {
+		for(int i=0; i<DATA_LAST_COUNT; i++){
+			if(hBitmapData[i]){
+				_hBitmapData[i] = hBitmapData[i];
+			}
+		}
+
+		for(int j=0; j<STATE_LAST_COUNT; j++){
+			if(hBitmapState[j]){ 
+				_hBitmapState[j] = hBitmapState[j];
+			}
+		}
 	}
 
 public:
@@ -53,11 +75,13 @@ public:
 	VOID SetY(LONG y) { _y = y; }
 	VOID SetWidth(LONG Width) { _Width = Width; }
 	VOID SetHeight(LONG Height) { _Height = Height; }
+	VOID SetData(DATA Data) { _Data = Data; }
 
 public:
 	UINT GetID() { return _ID; }
 	TYPE GetType() { return _Type; }
 	HWND GetParent() { return _hParent; }
+	DATA GetData() { return _Data; }
 	STATE GetState() { return _State; }
 	SHAPE GetShape() { return _Shape; }
 	BOOL IsCapture() { return _bCapture;}
@@ -73,14 +97,13 @@ public:
 		: _Type(Type), _x(x), _y(y), _Width(Width), _Height(Height), _ID(ID), _hParent(hParent), _bCapture(FALSE), _bLeft(FALSE)
 	{
 		ButtonCount++;
+		_Data = EMPTY;
 		_State = NORMAL;
 		_Shape = RECTANGLE;
 	}
 
 	~Button(){
-		for(int i=0; i<5; i++){
-			if(_hBitmap[i]){DeleteObject(_hBitmap[i]);}
-		}
+		DeleteBitmap();
 		--ButtonCount;
 	}
 };

@@ -18,19 +18,30 @@
 #define TOVERSION(major, minor, build, patch) STR(major.minor.build.patch)
 #define FULLVERSION TOVERSION(VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD, VERSION_PATCH)
 
+#define IDW_STATUS		10000
+
 #define ID_SYS_ABOUT	40000
 #define ID_SYS_NEWGAME	40001
 #define ID_SYS_RESIZE1	40002
 #define ID_SYS_RESIZE2	40003
 #define ID_SYS_RESIZE3	40004
 
-#define IDW_STATUS		10000
-
 #define IDB_NORMAL		50000
-#define IDB_ONE			50001
-#define IDB_TWO			50002
-#define IDB_THREE		50003
-#define IDB_PRESSED		50004
+#define IDB_PRESS		50001
+#define IDB_PRESSING	50002
+#define IDB_BLOCK		50003
+#define IDB_HOT			50004
+
+#define IDB_EMPTY		60000
+#define IDB_MINE		60001
+#define IDB_ONE			60002
+#define IDB_TWO			60003
+#define IDB_THREE		60004
+#define IDB_FOUR		60005
+#define IDB_FIVE		60006
+#define IDB_SIX			60007
+#define IDB_SEVEN		60008
+#define IDB_EIGHT		60009
 
 typedef struct tag_MSGMAP{
 	UINT iMessage;
@@ -58,4 +69,6 @@ void InitButtons(HWND hWnd, Button** Btns, int W, int H);
 void DestroyButtons(Button** Target, int W, int H);
 void OnDrawButtons(HDC hdc, Button** Btns, int W, int H);
 void GetIndex(LPARAM, UINT*, UINT*);
+void RandomizeSet();
+void ExploreSurround();
 #endif

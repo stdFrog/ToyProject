@@ -58,11 +58,20 @@ VOID Button::DrawBitmap(HDC hDC){
 		hDC = GetDC(_hParent);
 	}
 
-	HDC hMemDC = CreateCompatibleDC(hDC);
-	HGDIOBJ hOld = SelectObject(hMemDC, _hBitmap[_State]);
-	BitBlt(hDC, _x,_y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
-	SelectObject(hMemDC, hOld);
-	DeleteDC(hMemDC);
+	if(_State == PRESS){
+		HDC hMemDC = CreateCompatibleDC(hDC);
+		HGDIOBJ hOld = SelectObject(hMemDC, _hBitmapData[_Data]);
+		BitBlt(hDC, _x,_y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
+		SelectObject(hMemDC, hOld);
+		DeleteDC(hMemDC);
+
+	}else{
+		HDC hMemDC = CreateCompatibleDC(hDC);
+		HGDIOBJ hOld = SelectObject(hMemDC, _hBitmapState[_State]);
+		BitBlt(hDC, _x,_y, _Width, _Height, hMemDC, 0,0, SRCCOPY);
+		SelectObject(hMemDC, hOld);
+		DeleteDC(hMemDC);
+	}
 
 	if(ParentDC){ ReleaseDC(_hParent, hDC); }
 }

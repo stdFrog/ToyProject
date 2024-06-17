@@ -3,6 +3,7 @@
 #include "..\\Headers\\resource.h"
 #include "..\\Headers\\Color.h"
 #include "..\\Headers\\Button.h"
+#include "..\\Headers\\Queue.h"
 #include <commctrl.h>
 #pragma comment(lib, "comctl32")
 
@@ -31,10 +32,15 @@ typedef enum { GAME_BEGIN, GAME_PAUSE, GAME_END } GAME_STATE;
 UINT_PTR Index;
 UINT_PTR g_Time;
 
-int Bomb;
+int MINECNT;
 GAME_STATE g_GameState;
-HBITMAP g_hBitmap[5];
+HBITMAP g_hBitmapData[DATA_LAST_COUNT];
+HBITMAP g_hBitmapState[STATE_LAST_COUNT];
+
 Button** Btns = NULL;
+
+/* TODO : Create a Queue Structure */
+Queue* Q = NULL;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -62,11 +68,17 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	AppendMenu(hPopupSize, MF_STRING, ID_SYS_RESIZE3, TEXT("40 X 30"));
 	CheckMenuRadioItem(hPopupSize, ID_SYS_RESIZE1, ID_SYS_RESIZE2, ID_SYS_RESIZE1, MF_BYCOMMAND);
 
-	g_hBitmap[0] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_NORMAL));
-	g_hBitmap[1] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_ONE));
-	g_hBitmap[2] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_TWO));
-	g_hBitmap[3] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_THREE));
-	g_hBitmap[4] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_PRESSED));
+	for(INT_PTR i=0; i<DATA_LAST_COUNT; i++){
+		g_hBitmapData[i] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_EMPTY + i));
+		TCHAR buf[1024];
+		wsprintf(buf, TEXT("LoadBitmap Failed: IDB_NORMAL = %d, i = %d "), IDB_NORMAL, i);
+		if(g_hBitmapData[i]==NULL){MessageBox(hWnd, buf, TEXT(""), MB_OK);}
+	}
+
+	for(INT_PTR j=0; j<STATE_LAST_COUNT; j++){
+		g_hBitmapState[j] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_NORMAL + j));
+		if(g_hBitmapState[j]==NULL){MessageBox(hWnd, TEXT("State Image Is NULL"), TEXT(""), MB_OK);}
+	}
 
 	InitCommonControls();
 	// hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
@@ -76,30 +88,42 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	SetWindowLong(hWnd, GWL_STYLE, dwStyle & ~WS_THICKFRAME);
 	SendMessage(hWnd, WM_NCPAINT, 1, 0);
 
-	Bomb = 0;
 	Index = 0;
+	MINECNT = Table[Index].x;
 	SetClientRect(hWnd, TILE_SIZE * Table[Index].x, TILE_SIZE * Table[Index].y + (g_trt.bottom - g_trt.top));
 	GetClientRect(hWnd, &g_crt);
 	g_GameState = GAME_PAUSE;
 
 	Btns = CreateButtons(Table[Index].x, Table[Index].y);
 	InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
-
+	RandomizeSet();
+	ExploreSurround();
+		
 	return 0;
 }
 
 LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	if(hClientBitmap){DeleteObject(hClientBitmap);}
-	if(g_hBitmap){
-		for(int i=0; i<5; i++){
-			if(g_hBitmap[i]){
-				DeleteObject(g_hBitmap[i]);
+	if(g_hBitmapData){
+		for(int i=0; i<DATA_LAST_COUNT; i++){
+			if(g_hBitmapData[i]){
+				DeleteObject(g_hBitmapData[i]);
+			}
+		}
+	}
+	if(g_hBitmapState){
+		for(int i=0; i<STATE_LAST_COUNT; i++){
+			if(g_hBitmapState[i]){
+				DeleteObject(g_hBitmapState[i]);
 			}
 		}
 	}
 	if(Btns){DestroyButtons(Btns, Table[Index].x, Table[Index].y);}
+	if(Q){DestroyQueue(Q);}
 
+	KillTimer(hWnd, 0);
 	KillTimer(hWnd, 1);
+	KillTimer(hWnd, 1234);
 	PostQuitMessage(0);
 	return 0;
 }
@@ -123,18 +147,8 @@ LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	/*
-	if(GetForegroundWindow() != hWnd){return 0;}
-
-	static UINT pix = -1, piy = -1;
-	UINT ix, iy;
-	GetIndex(lParam, &ix, &iy);
-
-	if(GetCapture() == hWnd){
-		Btns[iy][ix].ChangeState(PRESS);
-	}else if(GetCapture() == NULL){
-		Btns[iy][ix].ChangeState(HOT);
-	}
+	/* 
+	   핫 상태를 굳이 표현할 필요가 있는가?
 	*/
 	return 0;
 }
@@ -200,7 +214,8 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	switch(wParam){
 		case 0:
 			{
-				
+				/* 상태값 폴링 - 핫 상태 사용시에만 적용 */
+				KillTimer(hWnd, 0);
 			}
 			break;
 		case 1:
@@ -279,7 +294,7 @@ void SetClientRect(HWND hWnd, int Width, int Height){
 void SetStatusText(HWND hWnd){
 	TCHAR Info[MAX_PATH];
 
-	wsprintf(Info, TEXT("Hidden Bombs : %d"), ((g_GameState != GAME_BEGIN) ? 0 : Bomb));
+	wsprintf(Info, TEXT("Hidden Mines : %d"), ((g_GameState != GAME_BEGIN) ? 0 : MINECNT));
 	SendMessage(hStatusWnd, SB_SETTEXT, 0, (LPARAM)Info);
 	wsprintf(Info, TEXT("Map Size : %dx%d"), Table[Index].x, Table[Index].y);
 	SendMessage(hStatusWnd, SB_SETTEXT, 1, (LPARAM)Info);
@@ -296,14 +311,88 @@ Button** CreateButtons(int W, int H){
 	return Btns;
 }
 
+void RandomizeSet(){
+	MSG msg = {0};
+	/* TODO : 현재 맵 사이즈 확인 */
+	int Row = Table[Index].x;
+	int Col = Table[Index].y;
+
+	while(MINECNT-- > 0){
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
+
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		int r = rand() % Row;
+		int c = rand() % Col;
+
+		if(Btns[c][r].GetData() == MINE){
+			MINECNT++;
+		}else{
+			Btns[c][r].SetData(MINE);
+			if(Q == NULL){
+				Q = CreateQueue();
+			}
+			Enqueue(Q, CreateNode(r,c));
+		}
+	}
+}
+
 void InitButtons(HWND hWnd, Button** Btns, int W, int H){
+	MSG msg = {0};
+
 	for(int i=0; i<H; i++){
 		for(int j=0; j<W; j++){
+			while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+				if(msg.message == WM_QUIT){
+					PostQuitMessage(0);
+				}
+
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+
 			Btns[i][j].SetParent(hWnd);
 			Btns[i][j].SetX(j * TILE_SIZE);
 			Btns[i][j].SetY(i * TILE_SIZE);
-			Btns[i][j].SetBitmap(g_hBitmap);
+			Btns[i][j].SetBitmap(g_hBitmapData, g_hBitmapState);
 		}
+	}
+}
+
+/* 
+   아래 함수 개선시 게임 전반적인 구조 완성
+
+
+*/
+void ExploreSurround(){
+	int dx[] = {0, 1, 1, 1, 0, -1, -1, -1},
+		dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+
+	while(!IsEmpty(Q)){
+		Node* Popped = Dequeue(Q);
+
+		TCHAR Debug[256];
+		wsprintf(Debug, TEXT("Popped: x = %d, y = %d"), Popped->x, Popped->y);
+		MessageBox(HWND_DESKTOP, Debug, TEXT(""), MB_OK);
+
+		for(int i=0; i<8; i++){
+			int x = Popped->x + dx[i];
+			int y = Popped->y + dy[i];
+
+			if(x < 0 || x > Table[Index].x || y < 0 || y > Table[Index].y){continue;}
+
+			DATA Current = Btns[y][x].GetData();
+			#define CLAMP(Min, Max, Num) (((Num) < (Min)) ? (Min) : ((Num) < (Max)) ? (Num) : (Max))
+			DATA NewData = (DATA)(CLAMP((int)EMPTY, (int)(DATA_LAST_COUNT - 1), (int)(Current + 1)));
+			Btns[y][x].SetData(NewData);
+		}
+
+		DestroyNode(Popped);
 	}
 }
 
