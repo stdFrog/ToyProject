@@ -41,6 +41,7 @@ Button** Btns = NULL;
 
 /* TODO : Create a Queue Structure */
 Queue* Q = NULL;
+Queue* CQ = NULL;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
@@ -98,11 +99,10 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
 	RandomizeSet();
 	/* TODO : 
-		ExploreSurround 함수 개선하고 Active 메세지 쪽으로 이동
-		
-		주위 탐색용 함수가 2개 필요한데, ExploreSurroud를 기존과 달리 EMPTY DATA를 찾는 용도로 수정
+		주위 탐색용 함수가 2개 필요한데, ExploreAround를 기존과 달리 EMPTY DATA를 찾는 용도로 수정
 		DataSet 따위의 이름으로 함수 하나 만들고 지금처럼 지뢰 주변 8칸 탐색해서 지뢰 개수 카운팅
 	*/
+	
 		
 	return 0;
 }
@@ -125,6 +125,7 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	}
 	if(Btns){DestroyButtons(Btns, Table[Index].x, Table[Index].y);}
 	if(Q){DestroyQueue(Q);}
+	if(CQ){DestroyQueue(CQ);}
 
 	KillTimer(hWnd, 0);
 	KillTimer(hWnd, 1);
@@ -148,6 +149,15 @@ LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	Btns[g_iy][g_ix].OnReleased();
+
+	if(Btns[g_iy][g_ix].GetState() == PRESS){
+		if(CQ == NULL){
+			CQ = CreateQueue();
+		}
+
+		Enqueue(CQ, CreateNode(g_ix, g_iy));
+		ExploreAround();
+	}
 	return 0;
 }
 
@@ -339,11 +349,13 @@ void RandomizeSet(){
 			MINECNT++;
 		}else{
 			Btns[c][r].SetData(MINE);
+
 			if(Q == NULL){
 				Q = CreateQueue();
 			}
-			Enqueue(Q, CreateNode(r,c));
+
 			MINECNT--;
+			Enqueue(Q, CreateNode(r,c));
 		}
 	}
 }
@@ -371,29 +383,39 @@ void InitButtons(HWND hWnd, Button** Btns, int W, int H){
 }
 
 /* 
-   아래 함수 개선시 게임 전반적인 구조 완성
+	4방향 탐색을 위해 큐 구조 활용,
+	화면을 벗어나는 경우 프로그램이 종료된다.
 
-
+	Access Violation의 일종으로 보이는데 전체 배열의 크기를 벗어난 첨자를 사용한 것으로 보인다.
+	탐색 자체는 크게 문제되지 않으나 범위가 넓어질수록 속도가 감소한다.
 */
-void ExploreSurround(){
-	int dx[] = {0, 1, 1, 1, 0, -1, -1, -1},
-		dy[] = {-1, -1, 0, 1, 1, 1, 0, -1};
+void ExploreAround(){
+	static int dx[] = {0, 1, 0, -1},
+			   dy[] = {-1, 0, 1, 0};
 
-	while(!IsEmpty(Q)){
-		Node* Popped = Dequeue(Q);
+	MSG msg;
+	while(!IsEmpty(CQ)){
+		Node* Popped = Dequeue(CQ);
 
-		for(int i=0; i<8; i++){
-			int x = Popped->x + dx[i];
-			int y = Popped->y + dy[i];
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
 
-			if(x < 0 || x > Table[Index].x || y < 0 || y > Table[Index].y){continue;}
-
-			DATA Current = Btns[y][x].GetData();
-			#define CLAMP(Min, Max, Num) (((Num) < (Min)) ? (Min) : ((Num) < (Max)) ? (Num) : (Max))
-			DATA NewData = (DATA)(CLAMP((int)EMPTY, (int)(DATA_LAST_COUNT - 1), (int)(Current + 1)));
-			Btns[y][x].SetData(NewData);
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
 		}
 
+		for(int i=0; i<4; i++){
+			int xx = Popped->x + dx[i];
+			int yy = Popped->y + dy[i];
+
+			if(yy < 0 || yy > Table[Index].y || xx < 0 || xx > Table[Index].x){continue;}
+			if(Btns[yy][xx].GetData() == EMPTY){
+				Btns[yy][xx].ChangeState(PRESS);
+				Enqueue(CQ, CreateNode(xx,yy));
+			}
+		}
 		DestroyNode(Popped);
 	}
 }
@@ -428,12 +450,6 @@ void OnDrawButtons(HDC hdc, Button** Btns, int W, int H){
 	}
 }
 
-/* 
-	현재 구조로 테스트해 본 결과,
-	반응이 느리고 재진입 허가 상태이므로 단순 이중 for문 구조가 아닌
-	화면 좌표값으로부터 배열 첨자를 계산하는 구조로 변경되어야 한다.
-*/
-
 void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
 	LONG x = (LONG)(WORD)LOWORD(lParam);
 	LONG y = (LONG)(WORD)HIWORD(lParam);
@@ -441,3 +457,5 @@ void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
 	*ix = x / TILE_SIZE;
 	*iy = y / TILE_SIZE;
 }
+
+

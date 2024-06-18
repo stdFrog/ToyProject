@@ -70,5 +70,5 @@ void DestroyButtons(Button** Target, int W, int H);
 void OnDrawButtons(HDC hdc, Button** Btns, int W, int H);
 void GetIndex(LPARAM, UINT*, UINT*);
 void RandomizeSet();
-void ExploreSurround();
+void ExploreAround();
 #endif

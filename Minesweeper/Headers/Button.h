@@ -50,6 +50,7 @@ public:
 
 public:
 	VOID ChangeState(STATE CurrentState) { _State = CurrentState; DrawBitmap(NULL); }
+
 public:
 	VOID SetID(UINT NewID) { _ID = NewID; }
 	VOID SetType(TYPE NewType) { _Type = NewType; }
