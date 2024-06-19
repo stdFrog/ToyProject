@@ -71,4 +71,5 @@ void OnDrawButtons(HDC hdc, Button** Btns, int W, int H);
 void GetIndex(LPARAM, UINT*, UINT*);
 void RandomizeSet();
 void ExploreAround();
+void IncreaseDataSet();
 #endif

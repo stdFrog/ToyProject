@@ -71,19 +71,23 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 	for(INT_PTR i=0; i<DATA_LAST_COUNT; i++){
 		g_hBitmapData[i] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_EMPTY + i));
+		/*
 		TCHAR buf[1024];
 		wsprintf(buf, TEXT("LoadBitmap Failed: IDB_NORMAL = %d, i = %d "), IDB_NORMAL, i);
 		if(g_hBitmapData[i]==NULL){MessageBox(hWnd, buf, TEXT(""), MB_OK);}
+		*/
 	}
 
 	for(INT_PTR j=0; j<STATE_LAST_COUNT; j++){
 		g_hBitmapState[j] = LoadBitmap(GetModuleHandle(NULL), MAKEINTRESOURCE(IDB_NORMAL + j));
+		/*
 		if(g_hBitmapState[j]==NULL){MessageBox(hWnd, TEXT("State Image Is NULL"), TEXT(""), MB_OK);}
+		*/
 	}
 
-	InitCommonControls();
+	// InitCommonControls();
 	// hStatusWnd = CreateStatusWindow(WS_VISIBLE | WS_CHILD, TEXT(""), hWnd, IDW_STATUS);
-	hStatusWnd = CreateWindowEx(0, STATUSCLASSNAME, NULL, /*SBARS_SIZEGRIP | SBARS_TOOLTIPS */ WS_CHILD | WS_VISIBLE, 0,0,0,0, hWnd, (HMENU)IDW_STATUS, GetModuleHandle(NULL), NULL);
+	// hStatusWnd = CreateWindowEx(0, STATUSCLASSNAME, NULL, /*SBARS_SIZEGRIP | SBARS_TOOLTIPS */ WS_CHILD | WS_VISIBLE, 0,0,0,0, hWnd, (HMENU)IDW_STATUS, GetModuleHandle(NULL), NULL);
 
 	DWORD dwStyle = GetWindowLong(hWnd, GWL_STYLE);
 	SetWindowLong(hWnd, GWL_STYLE, dwStyle & ~WS_THICKFRAME);
@@ -91,19 +95,17 @@ LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 	Index = 0;
 	MINECNT = Table[Index].x;
+	g_GameState = GAME_PAUSE;
+
 	SetClientRect(hWnd, TILE_SIZE * Table[Index].x, TILE_SIZE * Table[Index].y + (g_trt.bottom - g_trt.top));
 	GetClientRect(hWnd, &g_crt);
-	g_GameState = GAME_PAUSE;
 
 	Btns = CreateButtons(Table[Index].x, Table[Index].y);
 	InitButtons(hWnd, Btns, Table[Index].x, Table[Index].y);
+
+	if(Q == NULL){ Q = CreateQueue(); }
 	RandomizeSet();
-	/* TODO : 
-		주위 탐색용 함수가 2개 필요한데, ExploreAround를 기존과 달리 EMPTY DATA를 찾는 용도로 수정
-		DataSet 따위의 이름으로 함수 하나 만들고 지금처럼 지뢰 주변 8칸 탐색해서 지뢰 개수 카운팅
-	*/
-	
-		
+
 	return 0;
 }
 
@@ -136,6 +138,9 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 UINT g_ix, g_iy;
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	static BOOL bFirst = TRUE;
+	if(bFirst){IncreaseDataSet(); bFirst = FALSE;}
+
 	GetIndex(lParam, &g_ix, &g_iy);
 	Btns[g_iy][g_ix].OnLPressed();
 	return 0;
@@ -205,12 +210,14 @@ LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			hClientBitmap = NULL;
 		}
 
+		/*
 		SendMessage(hStatusWnd, WM_SIZE, wParam, lParam);
 		for(int i=0; i<3; i++){
 			Part[i] = LOWORD(lParam) / 3 * (i + 1);
 		}
 		SendMessage(hStatusWnd, SB_SETPARTS, 3, (LPARAM)Part);
 		SendMessage(hStatusWnd, SB_GETRECT, 0, (LPARAM)&g_trt);
+		*/
 	}
 	return 0;
 }
@@ -245,8 +252,10 @@ LRESULT OnTimer(HWND hWnd, WPARAM wParam, LPARAM lParam){
 			break;
 	}
 
+	/*
 	SendMessage(hStatusWnd, SB_GETRECT, 2, (LPARAM)&g_trt);
 	InvalidateRect(hWnd, &g_trt, TRUE);
+	*/
 	return 0;
 }
 
@@ -350,10 +359,6 @@ void RandomizeSet(){
 		}else{
 			Btns[c][r].SetData(MINE);
 
-			if(Q == NULL){
-				Q = CreateQueue();
-			}
-
 			MINECNT--;
 			Enqueue(Q, CreateNode(r,c));
 		}
@@ -379,44 +384,6 @@ void InitButtons(HWND hWnd, Button** Btns, int W, int H){
 			Btns[i][j].SetY(i * TILE_SIZE);
 			Btns[i][j].SetBitmap(g_hBitmapData, g_hBitmapState);
 		}
-	}
-}
-
-/* 
-	4방향 탐색을 위해 큐 구조 활용,
-	화면을 벗어나는 경우 프로그램이 종료된다.
-
-	Access Violation의 일종으로 보이는데 전체 배열의 크기를 벗어난 첨자를 사용한 것으로 보인다.
-	탐색 자체는 크게 문제되지 않으나 범위가 넓어질수록 속도가 감소한다.
-*/
-void ExploreAround(){
-	static int dx[] = {0, 1, 0, -1},
-			   dy[] = {-1, 0, 1, 0};
-
-	MSG msg;
-	while(!IsEmpty(CQ)){
-		Node* Popped = Dequeue(CQ);
-
-		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
-			if(msg.message == WM_QUIT){
-				PostQuitMessage(0);
-			}
-
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
-		}
-
-		for(int i=0; i<4; i++){
-			int xx = Popped->x + dx[i];
-			int yy = Popped->y + dy[i];
-
-			if(yy < 0 || yy > Table[Index].y || xx < 0 || xx > Table[Index].x){continue;}
-			if(Btns[yy][xx].GetData() == EMPTY){
-				Btns[yy][xx].ChangeState(PRESS);
-				Enqueue(CQ, CreateNode(xx,yy));
-			}
-		}
-		DestroyNode(Popped);
 	}
 }
 
@@ -458,4 +425,88 @@ void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
 	*iy = y / TILE_SIZE;
 }
 
+/* 
+	수정 필요: 끝내야 하는 시점 추가
+*/
+void ExploreAround(){
+	static int dx[] = {0, 1, 0, -1},
+			   dy[] = {-1, 0, 1, 0};
 
+	MSG msg;
+	while(!IsEmpty(CQ)){
+		Node* Popped = Dequeue(CQ);
+
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
+
+			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		}
+
+		for(int i=0; i<4; i++){
+			int xx = Popped->x + dx[i];
+			int yy = Popped->y + dy[i];
+
+			if(yy < 0 || yy >= Table[Index].y || xx < 0 || xx >= Table[Index].x){ continue; }
+			if(Btns[yy][xx].GetState() != NORMAL){ continue; }
+			if(Btns[yy][xx].GetData() != EMPTY){ continue; }
+
+			Btns[yy][xx].ChangeState(PRESS);
+			Enqueue(CQ, CreateNode(xx,yy));
+		}
+
+		DestroyNode(Popped);
+	}
+
+	while(!IsEmpty(CQ)){
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
+
+			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		}
+
+		DestroyNode(Dequeue(CQ));
+	}
+}
+
+/*
+
+*/
+void IncreaseDataSet(){
+	static int dx[] = {0, 1, 0, -1},
+			   dy[] = {-1, 0, 1, 0};
+
+	static int diagx[] = {1, 1, -1, -1},
+			   diagy[] = {-1, 1, 1, -1};
+
+	MSG msg;
+	while(!IsEmpty(Q)){
+		Node* Popped = Dequeue(Q);
+
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
+
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+		}
+
+		/*
+			TODO : 반응성 중요, 사용자 정의 타입 DATA { MINE, EMPTY }로 필요시 순서 변경
+		*/
+
+		DestroyNode(Popped);
+	}
+
+}
