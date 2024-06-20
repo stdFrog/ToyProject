@@ -138,9 +138,6 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 UINT g_ix, g_iy;
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	static BOOL bFirst = TRUE;
-	if(bFirst){IncreaseDataSet(); bFirst = FALSE;}
-
 	GetIndex(lParam, &g_ix, &g_iy);
 	Btns[g_iy][g_ix].OnLPressed();
 	return 0;
@@ -226,6 +223,8 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 	OnDrawButtons(hdc, Btns, Table[Index].x, Table[Index].y);
+	static BOOL bFirst = TRUE;
+	if(bFirst){IncreaseDataSet(); bFirst = FALSE;}
 	EndPaint(hWnd, &ps);
 	return 0;
 }
@@ -425,9 +424,23 @@ void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
 	*iy = y / TILE_SIZE;
 }
 
-/* 
-	수정 필요: 끝내야 하는 시점 추가
+/*
+	기존의 지뢰찾기 게임을 볼 때 BFS보단 DFS로의 구현이 더 정확해 보인다.
+	종료 시점과 메시지 루프를 수정해서 반응성을 높여보자.
+
+void ExploreBottomUp(int x , int y){
+	if(x < 0 || x >= Table[Index].x || y < 0 || y >= Table[Index].y){return;}
+	if(Btns[y][x].GetState() != NORMAL){return;}
+	if(Btns[y][x].GetData() != EMPTY){return;}
+
+	Btns[y][x].ChangeState(PRESS);
+	ExploreBottomUp(x+1, y);
+	ExploreBottomUp(x, y+1);
+	ExploreBottomUp(x-1, y);
+	ExploreBottomUp(x, y-1);
+}
 */
+
 void ExploreAround(){
 	static int dx[] = {0, 1, 0, -1},
 			   dy[] = {-1, 0, 1, 0};
@@ -479,7 +492,14 @@ void ExploreAround(){
 }
 
 /*
+	프로그램이 살해당하는 이유를 찾을 수 없다.
 
+	디버깅을 위한 도구가 부족해서 어림 짐작할 수 밖에 없는데,
+	당장 떠오르는 이유로는 배열의 범위를 넘어서는 첨자 또는 메시지 데드락이다.
+
+	메시지 펌프도 소용없으므로 메모리를 다루는 부분에서 오류가 발생하는 것으로 보인다.
+
+	당장 급한 일이 있기 때문에 명일 아침 수정하도록 하자.
 */
 void IncreaseDataSet(){
 	static int dx[] = {0, 1, 0, -1},
@@ -503,7 +523,24 @@ void IncreaseDataSet(){
 		}
 
 		/*
-			TODO : 반응성 중요, 사용자 정의 타입 DATA { MINE, EMPTY }로 필요시 순서 변경
+			TCHAR Debug[256];
+			wsprintf(Debug, TEXT("Popped = %d, %d"), Popped->x, Popped->y);
+			MessageBox(HWND_DESKTOP, Debug, TEXT(""), MB_OK);
+
+			약 10번 정도 시도해본 결과 범위를 벗어나는 배열 첨자는 없는 것으로 보인다.
+
+			후자의 경우 곧, 인라인 호출이 아니여서 메시지 데드락 현상이 발생하는 것이 거의 확실하다.
+			이를 위해 알고리즘을 세분화 할 필요가 있다.
+		*/
+	
+		/*
+		for(int i=0; i<4; i++){
+			int xx = Popped->x + dx[i];
+			int yy = Popped->y + dy[i];
+
+			if(Btns[yy][xx].GetData() == MINE){continue;}
+			Btns[yy][xx].SetData((DATA)(Btns[Popped->y][Popped->x].GetData() + MINE));
+		}
 		*/
 
 		DestroyNode(Popped);
