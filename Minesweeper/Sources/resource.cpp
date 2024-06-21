@@ -42,8 +42,10 @@ Button** Btns = NULL;
 /* TODO : Create a Queue Structure */
 Queue* Q = NULL;
 Queue* CQ = NULL;
+HWND g_hWnd;
 
 LRESULT OnCreate(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	g_hWnd = hWnd;
 	osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 	GetVersionEx(&osv);
 
@@ -138,6 +140,8 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam){
 
 UINT g_ix, g_iy;
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam){
+	static BOOL bFirst = TRUE;
+	if(bFirst){IncreaseDataSet(); bFirst = FALSE;}
 	GetIndex(lParam, &g_ix, &g_iy);
 	Btns[g_iy][g_ix].OnLPressed();
 	return 0;
@@ -223,8 +227,6 @@ LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(hWnd, &ps);
 	OnDrawButtons(hdc, Btns, Table[Index].x, Table[Index].y);
-	static BOOL bFirst = TRUE;
-	if(bFirst){IncreaseDataSet(); bFirst = FALSE;}
 	EndPaint(hWnd, &ps);
 	return 0;
 }
@@ -425,10 +427,7 @@ void GetIndex(LPARAM lParam, UINT* ix, UINT* iy){
 }
 
 /*
-	기존의 지뢰찾기 게임을 볼 때 BFS보단 DFS로의 구현이 더 정확해 보인다.
-	종료 시점과 메시지 루프를 수정해서 반응성을 높여보자.
-
-void ExploreBottomUp(int x , int y){
+void ExploreTopDown(int x , int y){
 	if(x < 0 || x >= Table[Index].x || y < 0 || y >= Table[Index].y){return;}
 	if(Btns[y][x].GetState() != NORMAL){return;}
 	if(Btns[y][x].GetData() != EMPTY){return;}
@@ -491,16 +490,6 @@ void ExploreAround(){
 	}
 }
 
-/*
-	프로그램이 살해당하는 이유를 찾을 수 없다.
-
-	디버깅을 위한 도구가 부족해서 어림 짐작할 수 밖에 없는데,
-	당장 떠오르는 이유로는 배열의 범위를 넘어서는 첨자 또는 메시지 데드락이다.
-
-	메시지 펌프도 소용없으므로 메모리를 다루는 부분에서 오류가 발생하는 것으로 보인다.
-
-	당장 급한 일이 있기 때문에 명일 아침 수정하도록 하자.
-*/
 void IncreaseDataSet(){
 	static int dx[] = {0, 1, 0, -1},
 			   dy[] = {-1, 0, 1, 0};
@@ -513,16 +502,16 @@ void IncreaseDataSet(){
 		Node* Popped = Dequeue(Q);
 
 		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
-
 			if(msg.message == WM_QUIT){
 				PostQuitMessage(0);
 			}
 
-			TranslateMessage(&msg);
-			DispatchMessage(&msg);
+			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
 		}
-
-		/*
+		/*		
 			TCHAR Debug[256];
 			wsprintf(Debug, TEXT("Popped = %d, %d"), Popped->x, Popped->y);
 			MessageBox(HWND_DESKTOP, Debug, TEXT(""), MB_OK);
@@ -533,17 +522,34 @@ void IncreaseDataSet(){
 			이를 위해 알고리즘을 세분화 할 필요가 있다.
 		*/
 	
-		/*
+		LockWindowUpdate(g_hWnd);
 		for(int i=0; i<4; i++){
 			int xx = Popped->x + dx[i];
 			int yy = Popped->y + dy[i];
 
-			if(Btns[yy][xx].GetData() == MINE){continue;}
-			Btns[yy][xx].SetData((DATA)(Btns[Popped->y][Popped->x].GetData() + MINE));
+			/* 이 구조일 땐 실행이 된다. */
+			if(Btns[yy][xx].GetData() == MINE){break;}
+			Btns[yy][xx].SetData(ONE);
+			// Btns[dy][dx].SetData(TWO);
+			// Btns[yy][xx].SetData((DATA)(Btns[yy][xx].GetData() + 1));
 		}
-		*/
+		LockWindowUpdate(NULL);
 
 		DestroyNode(Popped);
 	}
 
+	while(!IsEmpty(Q)){
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
+
+			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
+		}
+
+		DestroyNode(Dequeue(Q));
+	}
 }
