@@ -15,12 +15,12 @@ private:
 	LONG _x, _y, _Width, _Height;
 	UINT _ID;
 	HWND _hParent;
-	DATA _Data;
 	STATE _State;
 	SHAPE _Shape;
 	BOOL _bCapture, _bTimer, _bLeft;
 
 public:
+	DATA _Data;
 	HBITMAP _hBitmapData[DATA_LAST_COUNT];
 	HBITMAP _hBitmapState[STATE_LAST_COUNT];
 	VOID DeleteBitmap(){

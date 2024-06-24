@@ -9,6 +9,22 @@
 
 #define TILE_SIZE 16
 
+DATA& operator ++(DATA& D){
+	if(D == EIGHT) {D = ONE;}
+	else{
+		D = DATA(D+1);
+	}
+
+	return D;
+}
+
+const DATA operator ++(DATA& D, int Dummy){
+	DATA _D = D;
+	++D;
+	return _D;
+}
+
+
 BOOL bLeak = FALSE;
 int StretchMode;
 OSVERSIONINFO osv;
@@ -491,15 +507,14 @@ void ExploreAround(){
 }
 
 void IncreaseDataSet(){
-	static int dx[] = {0, 1, 0, -1},
-			   dy[] = {-1, 0, 1, 0};
-
-	static int diagx[] = {1, 1, -1, -1},
-			   diagy[] = {-1, 1, 1, -1};
-
+	int x,y;
 	MSG msg;
+	Node* Popped = NULL;
+
 	while(!IsEmpty(Q)){
-		Node* Popped = Dequeue(Q);
+		Popped = Dequeue(Q);
+		x = Popped->x;
+		y = Popped->y;
 
 		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
 			if(msg.message == WM_QUIT){
@@ -511,45 +526,29 @@ void IncreaseDataSet(){
 				DispatchMessage(&msg);
 			}
 		}
-		/*		
-			TCHAR Debug[256];
-			wsprintf(Debug, TEXT("Popped = %d, %d"), Popped->x, Popped->y);
-			MessageBox(HWND_DESKTOP, Debug, TEXT(""), MB_OK);
 
-			약 10번 정도 시도해본 결과 범위를 벗어나는 배열 첨자는 없는 것으로 보인다.
+		Btns[x][y-1]._Data++;
+		Btns[x+1][y]._Data++;
+		Btns[x][y+1]._Data++;
+		Btns[x-1][y]._Data++;
 
-			후자의 경우 곧, 인라인 호출이 아니여서 메시지 데드락 현상이 발생하는 것이 거의 확실하다.
-			이를 위해 알고리즘을 세분화 할 필요가 있다.
-		*/
-	
-		LockWindowUpdate(g_hWnd);
-		for(int i=0; i<4; i++){
-			int xx = Popped->x + dx[i];
-			int yy = Popped->y + dy[i];
+		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
+			if(msg.message == WM_QUIT){
+				PostQuitMessage(0);
+			}
 
-			/* 이 구조일 땐 실행이 된다. */
-			if(Btns[yy][xx].GetData() == MINE){break;}
-			Btns[yy][xx].SetData(ONE);
-			// Btns[dy][dx].SetData(TWO);
-			// Btns[yy][xx].SetData((DATA)(Btns[yy][xx].GetData() + 1));
+			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
+				TranslateMessage(&msg);
+				DispatchMessage(&msg);
+			}
 		}
-		LockWindowUpdate(NULL);
+
+		Btns[x+1][y-1]._Data++;
+		Btns[x+1][y+1]._Data++;
+		Btns[x-1][y+1]._Data++;
+		Btns[x-1][y-1]._Data++;
 
 		DestroyNode(Popped);
 	}
-
-	while(!IsEmpty(Q)){
-		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
-			if(msg.message == WM_QUIT){
-				PostQuitMessage(0);
-			}
-
-			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-		}
-
-		DestroyNode(Dequeue(Q));
-	}
 }
+
