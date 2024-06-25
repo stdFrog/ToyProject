@@ -53,7 +53,6 @@ LRESULT OnDestroy(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnRButtonDown(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam);
-LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSize(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam);
 LRESULT OnPaint(HWND hWnd, WPARAM wParam, LPARAM lParam);

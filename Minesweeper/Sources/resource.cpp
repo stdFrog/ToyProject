@@ -9,12 +9,24 @@
 
 #define TILE_SIZE 16
 
-DATA& operator ++(DATA& D){
-	if(D == EIGHT) {D = ONE;}
-	else{
-		D = DATA(D+1);
-	}
+/*
+	이 프로젝트는 당분간 중단한다.
 
+	빌드 후 프로그램을 처음 실행할 땐 잘 되지만,
+	이후부터 메시지 데드락 또는 비허가 접근으로 인해 프로그램이 살해당한다.
+	
+	또, 스마트 컨트롤 / 디바이스 가드 등의 디펜더가 작동하여 원활한 진행이 불가하다.
+
+	디지털 서명 및 인증서 등 프로그램을 보증할 수단과 보안 API 및 메시지 등을 공부한 이후 재개하기로 한다.
+*/
+
+DATA& operator ++(DATA& D){
+	if(D != MINE){
+		if(D == EIGHT || D == EMPTY) {D = ONE;}
+		else{
+			D = DATA(D+1);
+		}
+	}
 	return D;
 }
 
@@ -23,7 +35,6 @@ const DATA operator ++(DATA& D, int Dummy){
 	++D;
 	return _D;
 }
-
 
 BOOL bLeak = FALSE;
 int StretchMode;
@@ -55,7 +66,6 @@ HBITMAP g_hBitmapState[STATE_LAST_COUNT];
 
 Button** Btns = NULL;
 
-/* TODO : Create a Queue Structure */
 Queue* Q = NULL;
 Queue* CQ = NULL;
 HWND g_hWnd;
@@ -180,13 +190,6 @@ LRESULT OnLButtonUp(HWND hWnd, WPARAM wParam, LPARAM lParam){
 		Enqueue(CQ, CreateNode(g_ix, g_iy));
 		ExploreAround();
 	}
-	return 0;
-}
-
-LRESULT OnMouseMove(HWND hWnd, WPARAM wParam, LPARAM lParam){
-	/* 
-	   핫 상태를 굳이 표현할 필요가 있는가?
-	*/
 	return 0;
 }
 
@@ -511,21 +514,12 @@ void IncreaseDataSet(){
 	MSG msg;
 	Node* Popped = NULL;
 
+	LockWindowUpdate(g_hWnd);
+
 	while(!IsEmpty(Q)){
 		Popped = Dequeue(Q);
 		x = Popped->x;
 		y = Popped->y;
-
-		while(PeekMessage(&msg, nullptr, 0,0, PM_REMOVE)){
-			if(msg.message == WM_QUIT){
-				PostQuitMessage(0);
-			}
-
-			if(msg.message != WM_LBUTTONDOWN && msg.message != WM_RBUTTONDOWN){
-				TranslateMessage(&msg);
-				DispatchMessage(&msg);
-			}
-		}
 
 		Btns[x][y-1]._Data++;
 		Btns[x+1][y]._Data++;
@@ -550,5 +544,7 @@ void IncreaseDataSet(){
 
 		DestroyNode(Popped);
 	}
+
+	LockWindowUpdate(NULL);
 }
 
