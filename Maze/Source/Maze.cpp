@@ -33,7 +33,7 @@ Maze::~Maze()
 	{
 		for(int i=0; i<_size; i++)
 		{
-			delete MazeMap[i];
+			delete [] MazeMap[i];
 		}
 		delete [] MazeMap;
 	}
@@ -42,7 +42,7 @@ Maze::~Maze()
 	{
 		for(int i=0; i<_size; i++)
 		{
-			delete CopyMap[i];
+			delete [] CopyMap[i];
 		}
 		delete [] CopyMap;
 	}
