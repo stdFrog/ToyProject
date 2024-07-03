@@ -5,16 +5,29 @@
 #define CLASS_NAME TEXT("Lotto")
 
 #define QUIT -1
-#define FAILED 0
-#define SUCCEED 1
+#define FAILURE 0
+#define SUCCESS 1
+#define _TEXTOUT(DC, X, Y, TEXT) TextOut(DC, X, Y, TEXT, lstrlen(TEXT));
 
 HWND g_hWnd;
 HANDLE g_hTimer;
+HBITMAP g_hBitmap,
+		g_hWallPaper;
 
 BOOL Init();
 void Wait();
+void Clean();
+void GetClientSize(HWND hWnd, PLONG Width, PLONG Height);
 void SetClientRect(HWND hWnd, LONG Width, LONG Height);
+void CenterWindow(HWND hWnd);
 void DrawBitmap(HDC hdc, LONG x, LONG y, HBITMAP hBit);
+HBITMAP loadbmp(HDC hdc, LPCTSTR Path);
+
+void DrawBall(HDC hdc, COLORREF Color);
+void DrawCircle(HDC hdc, int x, int y, int iRadius);
+void Sort(int* arr, int left, int right);
+BOOL Choose();
+
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
@@ -25,7 +38,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
 		0,0,
 		hInst,
 		NULL, LoadCursor(NULL, IDC_ARROW),
-		(HBRUSH)(COLOR_WINDOW+1),
+		NULL,
 		NULL,
 		CLASS_NAME,
 		NULL
@@ -46,6 +59,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
 			);
 
 	SetClientRect(hWnd, 800, 600);
+	CenterWindow(hWnd);
 
 	ShowWindow(hWnd, nCmdShow);
 
@@ -58,7 +72,8 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
         }else{
 			// IDLE : 
 
-			Wait();
+			// Wait();
+			WaitMessage();
         }
     }
 
@@ -67,29 +82,86 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
 
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam) {
-	static HBITMAP hBit = NULL;
+	static LONG cWidth,
+				cHeight;
+
+	static int	StretchMode;
+
+	OSVERSIONINFO osv;
 
 	switch(iMessage)
 	{
 		case WM_CREATE:
-			if(Init() == FAILED){ return QUIT; }
+			if(Init() == FAILURE){ return QUIT; }
+			osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
+			if(osv.dwPlatformId >= VER_PLATFORM_WIN32_NT){
+				StretchMode = HALFTONE;
+			}else{
+				StretchMode = COLORONCOLOR;
+			}
+			SetTimer(hWnd, 1, 10, NULL);
 			return 0;
 			
 		case WM_PAINT:
 			{
 				PAINTSTRUCT ps;
 				HDC hdc = BeginPaint(hWnd, &ps);
-				
-				if(hBit)
+
+				if(g_hBitmap)
 				{
-					DrawBitmap(hdc, 0,0, hBit);
+					DrawBitmap(hdc, 0,0, g_hBitmap);
 				}
 				
 				EndPaint(hWnd, &ps);
 			}
 			return 0;
 
+		case WM_SIZE:
+			if(wParam != SIZE_MINIMIZED){
+				if(g_hBitmap != NULL){
+					DeleteObject(g_hBitmap);
+					g_hBitmap = NULL;
+				}
+			}
+			return 0;
+
+		case WM_TIMER:
+			{
+				HDC hdc = GetDC(hWnd);
+				HDC hBkDC = CreateCompatibleDC(hdc);
+				HDC hMemDC = CreateCompatibleDC(hdc);
+				
+				RECT crt;
+				GetClientRect(hWnd, &crt);
+				if(g_hBitmap == NULL){
+					g_hBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
+				}
+				HBITMAP hMemOld = (HBITMAP)SelectObject(hMemDC, g_hBitmap);
+				// 배경 : 비트맵 or 단색
+
+				if(g_hWallPaper == NULL){
+					g_hWallPaper = loadbmp(hdc, TEXT("WallPaper.bmp"));
+				}
+				HBITMAP hBkOld = (HBITMAP)SelectObject(hBkDC, g_hWallPaper);
+
+				BITMAP bmp;
+				GetObject(g_hWallPaper, sizeof(BITMAP), &bmp);
+
+				SetStretchBltMode(hMemDC, StretchMode);
+				StretchBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hBkDC, 0,0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
+
+				SelectObject(hBkDC, hBkOld);
+				SelectObject(hMemDC, hMemOld);
+				DeleteDC(hBkDC);
+				DeleteDC(hMemDC);
+				ReleaseDC(hWnd, hdc);
+			}
+
+			InvalidateRect(hWnd, NULL, FALSE);
+			return 0;
+
 		case WM_DESTROY:
+			Clean();
 			PostQuitMessage(0);
 			return 0;
 	}
@@ -98,7 +170,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 }
 
 BOOL Init(){
-	CreateWaitableTimer(NULL, FALSE, NULL);
+	g_hTimer = CreateWaitableTimer(NULL, FALSE, NULL);
 
 	if(g_hTimer == NULL){return FALSE;}
 
@@ -118,6 +190,21 @@ void Wait(){
 	}
 }
 
+void Clean(){
+	KillTimer(g_hWnd, 1);
+	if(g_hTimer != NULL){ CloseHandle(g_hTimer); }
+	if(g_hBitmap != NULL){ DeleteObject(g_hBitmap); }
+	if(g_hWallPaper != NULL){ DeleteObject(g_hWallPaper); }
+}
+
+void GetClientSize(HWND hWnd, PLONG Width, PLONG Height){
+	RECT crt;
+
+	GetClientRect(hWnd, &crt);
+	*Width = crt.right - crt.left;
+	*Height = crt.bottom - crt.top;
+}
+
 void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	if(hBitmap == NULL){return;}
 
@@ -127,7 +214,7 @@ void DrawBitmap(HDC hDC, LONG X, LONG Y, HBITMAP hBitmap){
 	BITMAP bmp;
 	GetObject(hBitmap, sizeof(BITMAP), &bmp);
 
-	BitBlt(hDC, X,Y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+	BitBlt(hDC, X, Y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
 
 	SelectObject(hMemDC, hOld);
 	DeleteDC(hMemDC);
@@ -148,3 +235,111 @@ void SetClientRect(HWND hWnd, LONG Width, LONG Height){
 	SetWindowPos(hWnd, NULL, 0,0, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
 }
 
+void DrawCircle(HDC hdc, int x, int y, int iRadius) {
+	Ellipse(hdc, x - iRadius, y - iRadius, x + iRadius, y + iRadius);
+}
+
+void DrawBall(HDC hdc, COLORREF Color){
+	/* Edit :  */
+	LONG Width,
+		 Height,
+		 OriginX,
+		 OriginY,
+		 MaxRadius,
+		 Range;
+
+	GetClientSize(g_hWnd, &Width, &Height);
+	if(Width == 0 || Height == 0){return;}
+
+	OriginX = Width >> 1;
+	OriginY = Height >> 1;
+
+	#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+	#define CLAMP(Min, Max, Value) (((Value) < (Min)) ? (Min) : ((Value) > (Max)) ? (Max) : (Value))
+
+	MaxRadius = MIN(Width, Height);
+	Range = MaxRadius >> 2;
+
+	HBRUSH hBrush,
+		   hOldBrush;
+
+	hBrush = CreateSolidBrush(RGB(255, 0,0));
+	hOldBrush = (HBRUSH)SelectObject(hdc, hBrush);
+	
+	for(int i=50; i<Range; i++){
+		DrawCircle(hdc, OriginX, OriginY, i);
+	}
+
+	DeleteObject(SelectObject(hdc, hOldBrush));
+}
+
+HBITMAP loadbmp(HDC hdc, LPCTSTR Path){
+	HANDLE hFile = CreateFile(Path, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+
+	if(hFile == INVALID_HANDLE_VALUE){return NULL;}
+
+	DWORD dwFileSize = GetFileSize(hFile, NULL);
+
+	BITMAPFILEHEADER *fh = (BITMAPFILEHEADER*)malloc(dwFileSize);
+
+	DWORD dwRead;
+	ReadFile(hFile, fh, dwFileSize, &dwRead, NULL);
+	CloseHandle(hFile);
+
+	PBYTE ih = ((PBYTE)fh + sizeof(BITMAPFILEHEADER));
+	HBITMAP ret = CreateDIBitmap(hdc, (BITMAPINFOHEADER*)ih, CBM_INIT, (PBYTE)fh + fh->bfOffBits, (BITMAPINFO*)ih, DIB_RGB_COLORS);
+
+	free(fh);
+	return ret;
+}
+
+void CenterWindow(HWND hWnd) {
+	RECT Desktop,
+		 Client;
+
+	LONG X, Y,
+		 Width,
+		 Height;
+
+	GetWindowRect(GetDesktopWindow(), &Desktop);
+	GetWindowRect(hWnd, &Client);
+
+	Width = Client.right - Client.left;
+	Height = Client.bottom - Client.top;
+	X = LONG((Desktop.right - Width) / 2);
+	Y = LONG((Desktop.bottom - Height) / 2);
+
+	MoveWindow(hWnd, X, Y, Width, Height, TRUE) ;
+}
+
+/* 
+	TODO : Logic Design
+	
+	X = { x | 0 <= x <= 45 }
+	N(X) = 46
+
+	f(x) = return type : boolean
+	정렬 및 탐색 속도 우선: 배열 활용
+
+	Lookup Table [0, 45];
+*/
+
+void Sort(int* arr, int left, int right){
+	int i = left,
+		j = right,
+		key = arr[ (left+right) / 2 ];
+
+	while(i<=j){
+		while(arr[i] < key){ i++; }
+		while(arr[j] > key){ j--; }
+		#define swap(a,b) {int n; n=a, a=b, b=n;}
+		if(i <= j){ swap(arr[i],arr[j]); i++; j--; }
+	}
+
+	if(i < right){ Sort(arr, i, right); }
+	if(j > left){ Sort(arr, left, j); }
+}
+
+BOOL Choose(){
+	return (BOOL)(rand() % 2);
+}
