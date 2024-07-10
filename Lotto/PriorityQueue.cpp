@@ -117,3 +117,6 @@ int IsEmpty(PriorityQueue* PQ){
 	return (PQ->UsedSize==0);
 }
 
+int Once(PriorityQueue* PQ){
+	return (PQ->UsedSize==1);
+}

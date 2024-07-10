@@ -9,6 +9,11 @@
 #define SUCCESS 1
 #define _TEXTOUT(DC, X, Y, TEXT) TextOut(DC, X, Y, TEXT, lstrlen(TEXT));
 
+#include "PriorityQueue.h"
+PriorityQueue* PQ = CreateQueue(100);
+PriorityQueue* Lottery = CreateQueue(100);
+PQNode Popped;
+
 HWND g_hWnd;
 HANDLE g_hTimer;
 HBITMAP g_hBitmap,
@@ -27,6 +32,8 @@ void DrawBall(HDC hdc, COLORREF Color);
 void DrawCircle(HDC hdc, int x, int y, int iRadius);
 void Sort(int* arr, int left, int right);
 BOOL Choose();
+void InitialSetUp();
+void Raffle();
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
@@ -99,6 +106,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			}else{
 				StretchMode = COLORONCOLOR;
 			}
+			InitialSetUp();
 			SetTimer(hWnd, 1, 10, NULL);
 			return 0;
 			
@@ -150,6 +158,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				SetStretchBltMode(hMemDC, StretchMode);
 				StretchBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hBkDC, 0,0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
 
+				if(GetAsyncKeyState(VK_LBUTTON) & 0x8000){ Raffle(); }
+
 				SelectObject(hBkDC, hBkOld);
 				SelectObject(hMemDC, hMemOld);
 				DeleteDC(hBkDC);
@@ -195,6 +205,8 @@ void Clean(){
 	if(g_hTimer != NULL){ CloseHandle(g_hTimer); }
 	if(g_hBitmap != NULL){ DeleteObject(g_hBitmap); }
 	if(g_hWallPaper != NULL){ DeleteObject(g_hWallPaper); }
+	if(PQ){DestroyQueue(PQ);}
+	if(Lottery){DestroyQueue(Lottery);}
 }
 
 void GetClientSize(HWND hWnd, PLONG Width, PLONG Height){
@@ -316,7 +328,7 @@ void CenterWindow(HWND hWnd) {
 	TODO : Logic Design
 	
 	X = { x | 0 <= x <= 45 }
-	N(X) = 46
+	n(X) = 46
 
 	f(x) = return type : boolean
 	정렬 및 탐색 속도 우선: 배열 활용
@@ -341,10 +353,13 @@ void Sort(int* arr, int left, int right){
 }
 
 BOOL Choose(){
+	static BOOL Init = FALSE;
+	if(Init == FALSE){srand(GetTickCount64());}
+
 	return (BOOL)(rand() % 2);
 }
 
-int LookupTable[] = {
+const int LookupTable[] = {
 	0, 1, 2, 3, 4, 5,
 	6, 7, 8, 9, 10, 11,
 	12, 13, 14, 15, 16, 17,
@@ -355,7 +370,22 @@ int LookupTable[] = {
 	42, 43, 44, 45
 };
 
-#include "PriorityQueue.h"
-PriorityQueue PQ;
+const int Pcs = sizeof(LookupTable)/sizeof(LookupTable[0]);
 
+void InitialSetUp(){
+	while(!IsEmpty(PQ)){ Dequeue(PQ, &Popped); }
 
+	for(int i=0; i<Pcs; i++){ 
+		PQNode NewNode = {LookupTable[i], NULL};
+		Enqueue(PQ, NewNode);
+	}
+}
+
+/* 버튼이나 레버 따위를 만든 후 애니메이션 추가해도 좋음 */
+void Raffle(){
+	if(PQ->UsedSize == 0){return;}
+
+	while(!Once(PQ)){ if(Choose()){ Dequeue(PQ, &Popped); } }
+	Dequeue(PQ, &Popped);
+	Enqueue(Lottery, Popped);
+}

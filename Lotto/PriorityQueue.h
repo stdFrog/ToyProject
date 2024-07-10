@@ -23,5 +23,6 @@ int GetParent(int Index);
 int GetLeftChild(int Index);
 void SwapNodes(PriorityQueue* PQ, int Index1, int Index2);
 int IsEmpty(PriorityQueue* PQ);
+int Once(PriorityQueue* PQ);
 
 #endif
