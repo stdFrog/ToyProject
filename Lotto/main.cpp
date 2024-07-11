@@ -14,6 +14,18 @@ PriorityQueue* PQ = CreateQueue(100);
 PriorityQueue* Lottery = CreateQueue(100);
 PQNode Popped;
 
+const int LookupTable[] = {
+	0, 1, 2, 3, 4, 5,
+	6, 7, 8, 9, 10, 11,
+	12, 13, 14, 15, 16, 17,
+	18, 19, 20, 21, 22, 23,
+	24, 25, 26, 27, 28, 29,
+	30, 31, 32, 33, 34, 35,
+	36, 37, 38, 39, 40, 41,
+	42, 43, 44, 45
+};
+const int Pcs = sizeof(LookupTable)/sizeof(LookupTable[0]);
+
 HWND g_hWnd;
 HANDLE g_hTimer;
 HBITMAP g_hBitmap,
@@ -158,7 +170,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				SetStretchBltMode(hMemDC, StretchMode);
 				StretchBlt(hMemDC, 0,0, crt.right - crt.left, crt.bottom - crt.top, hBkDC, 0,0, bmp.bmWidth, bmp.bmHeight, SRCCOPY);
 
-				if(GetAsyncKeyState(VK_LBUTTON) & 0x8000){ Raffle(); }
+				if(GetAsyncKeyState(VK_LBUTTON) & 0x8000){ 
+					TCHAR Debug[256];
+					wsprintf(Debug, TEXT("Pcs = %d"), Pcs);
+					_TEXTOUT(hMemDC, 10, 10, Debug);
+				}
 
 				SelectObject(hBkDC, hBkOld);
 				SelectObject(hMemDC, hMemOld);
@@ -359,19 +375,6 @@ BOOL Choose(){
 	return (BOOL)(rand() % 2);
 }
 
-const int LookupTable[] = {
-	0, 1, 2, 3, 4, 5,
-	6, 7, 8, 9, 10, 11,
-	12, 13, 14, 15, 16, 17,
-	18, 19, 20, 21, 22, 23,
-	24, 25, 26, 27, 28, 29,
-	30, 31, 32, 33, 34, 35,
-	36, 37, 38, 39, 40, 41,
-	42, 43, 44, 45
-};
-
-const int Pcs = sizeof(LookupTable)/sizeof(LookupTable[0]);
-
 void InitialSetUp(){
 	while(!IsEmpty(PQ)){ Dequeue(PQ, &Popped); }
 
@@ -381,11 +384,14 @@ void InitialSetUp(){
 	}
 }
 
-/* 버튼이나 레버 따위를 만든 후 애니메이션 추가해도 좋음 */
+/* Access violation */
+/* PQ 대신 일반 큐 사용 -> 자료구조 수정 필, 디버깅 함수 작성 필 */
 void Raffle(){
+	/*
 	if(PQ->UsedSize == 0){return;}
 
 	while(!Once(PQ)){ if(Choose()){ Dequeue(PQ, &Popped); } }
 	Dequeue(PQ, &Popped);
 	Enqueue(Lottery, Popped);
+	*/
 }
