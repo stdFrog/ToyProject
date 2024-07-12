@@ -9,20 +9,20 @@
 #define SUCCESS 1
 #define _TEXTOUT(DC, X, Y, TEXT) TextOut(DC, X, Y, TEXT, lstrlen(TEXT));
 
-#include "PriorityQueue.h"
-PriorityQueue* PQ = CreateQueue(100);
-PriorityQueue* Lottery = CreateQueue(100);
-PQNode Popped;
+#include "Stack.h"
+Stack* S = NULL;
+Node* Popped = NULL;
 
 const int LookupTable[] = {
-	0, 1, 2, 3, 4, 5,
-	6, 7, 8, 9, 10, 11,
-	12, 13, 14, 15, 16, 17,
-	18, 19, 20, 21, 22, 23,
-	24, 25, 26, 27, 28, 29,
-	30, 31, 32, 33, 34, 35,
-	36, 37, 38, 39, 40, 41,
-	42, 43, 44, 45
+	1, 2, 3, 4, 5,
+	6, 7, 8, 9, 10,
+	11, 12, 13, 14, 15,
+	16, 17, 18, 19, 20,
+	21, 22, 23, 24, 25,
+	26, 27, 28, 29, 30,
+	31, 32, 33, 34, 35,
+	36, 37, 38, 39, 40,
+	41, 42, 43, 44, 45
 };
 const int Pcs = sizeof(LookupTable)/sizeof(LookupTable[0]);
 
@@ -43,9 +43,8 @@ HBITMAP loadbmp(HDC hdc, LPCTSTR Path);
 void DrawBall(HDC hdc, COLORREF Color);
 void DrawCircle(HDC hdc, int x, int y, int iRadius);
 void Sort(int* arr, int left, int right);
-BOOL Choose();
+inline BOOL Choose();
 void InitialSetUp();
-void Raffle();
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
@@ -81,9 +80,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow) {
 	CenterWindow(hWnd);
 
 	ShowWindow(hWnd, nCmdShow);
+	srand(GetTickCount64());
 
     MSG msg = { 0 };
-
     while (msg.message != WM_QUIT) {
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
@@ -112,14 +111,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	{
 		case WM_CREATE:
 			if(Init() == FAILURE){ return QUIT; }
+			CreateStack(&S);
+			InitialSetUp();
+
 			osv.dwOSVersionInfoSize = sizeof(OSVERSIONINFO);
 			if(osv.dwPlatformId >= VER_PLATFORM_WIN32_NT){
 				StretchMode = HALFTONE;
 			}else{
 				StretchMode = COLORONCOLOR;
 			}
-			InitialSetUp();
-			SetTimer(hWnd, 1, 10, NULL);
+
+			SetTimer(hWnd, 1, 25, NULL);
 			return 0;
 			
 		case WM_PAINT:
@@ -221,8 +223,6 @@ void Clean(){
 	if(g_hTimer != NULL){ CloseHandle(g_hTimer); }
 	if(g_hBitmap != NULL){ DeleteObject(g_hBitmap); }
 	if(g_hWallPaper != NULL){ DeleteObject(g_hWallPaper); }
-	if(PQ){DestroyQueue(PQ);}
-	if(Lottery){DestroyQueue(Lottery);}
 }
 
 void GetClientSize(HWND hWnd, PLONG Width, PLONG Height){
@@ -347,7 +347,7 @@ void CenterWindow(HWND hWnd) {
 	n(X) = 46
 
 	f(x) = return type : boolean
-	정렬 및 탐색 속도 우선: 배열 활용
+	<수정> 추가/삭제 속도 우선, 순차 탐색 
 
 	Lookup Table [0, 45];
 */
@@ -368,30 +368,26 @@ void Sort(int* arr, int left, int right){
 	if(j > left){ Sort(arr, left, j); }
 }
 
-BOOL Choose(){
-	static BOOL Init = FALSE;
-	if(Init == FALSE){srand(GetTickCount64());}
-
-	return (BOOL)(rand() % 2);
-}
+BOOL Choose(){ return (BOOL)(rand() % 2); }
 
 void InitialSetUp(){
-	while(!IsEmpty(PQ)){ Dequeue(PQ, &Popped); }
+	if(S == NULL){return;}
 
-	for(int i=0; i<Pcs; i++){ 
-		PQNode NewNode = {LookupTable[i], NULL};
-		Enqueue(PQ, NewNode);
+	for(int i=0; i<Pcs; i++){
+		Push(S, CreateNode(i));
 	}
 }
 
-/* Access violation */
-/* PQ 대신 일반 큐 사용 -> 자료구조 수정 필, 디버깅 함수 작성 필 */
-void Raffle(){
-	/*
-	if(PQ->UsedSize == 0){return;}
+/* 
+	매우 간단하게 계산해보면 45개중 6개를 선택하면 되므로
+	45C6 => C(45, 6) : 1 / 8,145,060
 
-	while(!Once(PQ)){ if(Choose()){ Dequeue(PQ, &Popped); } }
-	Dequeue(PQ, &Popped);
-	Enqueue(Lottery, Popped);
-	*/
+	현재 방식인 Boolean 타입 곧, 참/거짓 절반 확률의 문제로 계산해보면
+	2^23 = 8,388,608로 약 23회 반복 필요
+
+	-> 조합식 만들고 메모이제이션 활용해서 구조 단순히 작성해볼 것
+*/
+
+void Raffle(){
+
 }
