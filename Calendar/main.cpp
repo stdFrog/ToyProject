@@ -19,6 +19,14 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 /*
 	- 2024.09.22,
 	베이스 윈도우 제작, 창 분할, 캘린더 그리기 추가
+
+	- 2024.09.23
+	캘린더 위 마우스 트래킹 : 타이머 폴링 대신 최신 구조체 활용
+	마우스 포인터 끝 부분에 원형을 그려, 마우스가 위치한 지점을 보기 쉽게 만들고자 한다.
+	그리기 주체를 바꿔가며 실험해봤는데 원하는대로 이전 지점의 원형을 지우기 쉽지 않다.
+
+	비트맵이나 자료구조를 이용하여 위치를 기억하고 이전 위치를 지우는 방법을 이용해야 할 것 같다.
+	또한, 마우스가 이동할 때마다 메시지가 발생하기 때문에 굳이 트랙 이벤트는 사용하지 않기로 한다.
 */
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
@@ -39,7 +47,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
 
 	wcex.lpfnWndProc = CalendarProc;
 	wcex.lpszClassName = TEXT("CalendarPopup");
-	wcex.hbrBackground = (HBRUSH)(COLOR_BTNFACE+1);
+	wcex.hbrBackground = NULL;
 	RegisterClassEx(&wcex);
 
 	HWND hWnd = CreateWindowEx(
@@ -185,8 +193,11 @@ void DrawCalendar(HWND hWnd, HDC hdc);
 void DrawBitmap(HDC hdc, int x, int y);
 
 LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
+	static POINT pt;
 	PAINTSTRUCT ps;
 	HDC hDC, hMemDC;
+	RECT rt;
+
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -197,10 +208,12 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 
 		case WM_PAINT:
 			hDC = BeginPaint(hWnd, &ps);
-			if(hBitmap == NULL){
-				DrawCalendar(hWnd, hDC);
+			DrawCalendar(hWnd, hDC);
+
+			if(hBitmap){
+				DrawBitmap(hDC, 0,0);
 			}
-			DrawBitmap(hDC, 0,0);
+
 			EndPaint(hWnd, &ps);
 			return 0;
 
@@ -209,6 +222,17 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 				DeleteObject(hBitmap);
 				hBitmap = NULL;
 				InvalidateRect(hWnd, NULL, FALSE);
+			}
+			return 0;
+
+		case WM_MOUSEMOVE:
+			{
+				/* 
+				   마우스 포인터를 따라다니는 원형을 그려 보기 쉽게 만든다.
+				   그리는 동작이 여러 곳에서 발생하므로 순서에 주의해야 한다.
+
+				   일단 기본 로직을 먼저 작성한다.
+				*/
 			}
 			return 0;
 
