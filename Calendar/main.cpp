@@ -20,13 +20,9 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 	- 2024.09.22,
 	베이스 윈도우 제작, 창 분할, 캘린더 그리기 추가
 
-	- 2024.09.23
-	캘린더 위 마우스 트래킹 : 타이머 폴링 대신 최신 구조체 활용
-	마우스 포인터 끝 부분에 원형을 그려, 마우스가 위치한 지점을 보기 쉽게 만들고자 한다.
-	그리기 주체를 바꿔가며 실험해봤는데 원하는대로 이전 지점의 원형을 지우기 쉽지 않다.
-
-	비트맵이나 자료구조를 이용하여 위치를 기억하고 이전 위치를 지우는 방법을 이용해야 할 것 같다.
-	또한, 마우스가 이동할 때마다 메시지가 발생하기 때문에 굳이 트랙 이벤트는 사용하지 않기로 한다.
+	- 2024.09.25
+	화면을 그릴 주체가 WM_PAINT이므로 DrawCalendar 함수를 수정했으며, WM_PAINT에서 더블 버퍼링을 적용한다.
+	마우스 트래커 비스무리한 흉내를 내기 위해 동그라미 모양이 마우스 포인터를 따라다니도록 만들었다.
 */
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow)
@@ -192,12 +188,17 @@ int LastDateOfTheMonth(int Y, int M);
 void DrawCalendar(HWND hWnd, HDC hdc);
 void DrawBitmap(HDC hdc, int x, int y);
 
+void SetTrackEvent(HWND hWnd);
+
 LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
-	static POINT pt;
+	static BOOL bHover;
+	static RECT rt;
 	PAINTSTRUCT ps;
 	HDC hDC, hMemDC;
-	RECT rt;
+	HGDIOBJ hOld;
+	BITMAP bmp;
 
+	static int sx, sy;
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -208,13 +209,38 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 
 		case WM_PAINT:
 			hDC = BeginPaint(hWnd, &ps);
-			DrawCalendar(hWnd, hDC);
+			hMemDC = CreateCompatibleDC(hDC);
 
-			if(hBitmap){
-				DrawBitmap(hDC, 0,0);
+			if(hBitmap == NULL){
+				GetClientRect(hWnd, &rt);
+				hBitmap = CreateCompatibleBitmap(hDC, rt.right, rt.bottom);
 			}
 
+			hOld = SelectObject(hMemDC, hBitmap);
+			FillRect(hMemDC, &rt, GetSysColorBrush(COLOR_WINDOW));
+
+			{
+				POINT cpt;
+				GetCursorPos(&cpt);
+				ScreenToClient(hWnd, &cpt);
+
+				HBRUSH hOldBrush = (HBRUSH)SelectObject(hMemDC, GetStockObject(NULL_BRUSH));
+				Ellipse(hMemDC, cpt.x - 5, cpt.y - 5, cpt.x + 5, cpt.y + 5);
+				SelectObject(hMemDC, hOldBrush);
+			}
+
+			DrawCalendar(hWnd, hMemDC);
+
+			GetObject(hBitmap, sizeof(BITMAP), &bmp);
+			BitBlt(hDC, 0,0, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+
+			SelectObject(hMemDC, hOld);
+			DeleteDC(hMemDC);
 			EndPaint(hWnd, &ps);
+			return 0;
+
+		case WM_MOUSEMOVE:
+			InvalidateRect(hWnd, NULL, FALSE);
 			return 0;
 
 		case WM_SIZE:
@@ -222,17 +248,6 @@ LRESULT CALLBACK CalendarProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lP
 				DeleteObject(hBitmap);
 				hBitmap = NULL;
 				InvalidateRect(hWnd, NULL, FALSE);
-			}
-			return 0;
-
-		case WM_MOUSEMOVE:
-			{
-				/* 
-				   마우스 포인터를 따라다니는 원형을 그려 보기 쉽게 만든다.
-				   그리는 동작이 여러 곳에서 발생하므로 순서에 주의해야 한다.
-
-				   일단 기본 로직을 먼저 작성한다.
-				*/
 			}
 			return 0;
 
@@ -276,6 +291,8 @@ int LastDateOfTheMonth(int Y, int M){
 }
 
 void DrawCalendar(HWND hWnd, HDC hdc){
+	if(hBitmap == NULL){return;}
+
 	static TCHAR *Days[] ={
 		TEXT("공백"),
 		TEXT("일요일"),
@@ -292,13 +309,7 @@ void DrawCalendar(HWND hWnd, HDC hdc){
 	HFONT hFont, hOldFont;
 	HPEN hPen, hOldPen;
 
-	HDC hMemDC = CreateCompatibleDC(hdc);
-	if(hBitmap == NULL){
-		GetClientRect(hWnd, &crt);
-		hBitmap = CreateCompatibleBitmap(hdc, crt.right, crt.bottom);
-	}
-	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
-	FillRect(hMemDC, &crt, GetSysColorBrush(COLOR_WINDOW));
+	GetClientRect(hWnd, &crt);
 
 	/* Halving */
 	int Halv = 9;
@@ -307,49 +318,50 @@ void DrawCalendar(HWND hWnd, HDC hdc){
 
 	SetRect(&yrt, 0, 0, crt.right, RowGap);
 	hBrush = CreateSolidBrush(RGB(0,0,255));
-	FillRect(hMemDC, &yrt, hBrush);
+	FillRect(hdc, &yrt, hBrush);
 	DeleteObject(hBrush);
 
 	SetRect(&drt, 0, yrt.bottom, yrt.right, yrt.bottom + RowGap);
 	hBrush = CreateSolidBrush(RGB(240, 240, 240));
-	FillRect(hMemDC, &drt, hBrush);
+	FillRect(hdc, &drt, hBrush);
 	DeleteObject(hBrush);
 
 	hFont = CreateFont(
-				20, 0, GM_COMPATIBLE, 0,
-				FW_BOLD, 0,0,0,
-				DEFAULT_CHARSET,
-				OUT_OUTLINE_PRECIS,
-				CLIP_DEFAULT_PRECIS,
-				CLEARTYPE_QUALITY,
-				VARIABLE_PITCH | FF_MODERN,
-				TEXT("consolas")
-			);
-	hOldFont = (HFONT)SelectObject(hMemDC, hFont);
+		20, 0, GM_COMPATIBLE, 0,
+		FW_BOLD, 0,0,0,
+		DEFAULT_CHARSET,
+		OUT_OUTLINE_PRECIS,
+		CLIP_DEFAULT_PRECIS,
+		CLEARTYPE_QUALITY,
+		VARIABLE_PITCH | FF_MODERN,
+		TEXT("consolas")
+	);
 
-	SetBkMode(hMemDC, TRANSPARENT);
-	SetTextAlign(hMemDC, TA_LEFT);
-	SetTextColor(hMemDC, RGB(255, 255, 255));
+	hOldFont = (HFONT)SelectObject(hdc, hFont);
+
+	SetBkMode(hdc, TRANSPARENT);
+	SetTextAlign(hdc, TA_LEFT);
+	SetTextColor(hdc, RGB(255, 255, 255));
 
 	TCHAR buf[0x80];
 	wsprintf(buf, TEXT("%d년 %d월"), Year, Month);
 
 	SIZE sz;
 	TEXTMETRIC tm;
-	GetTextMetrics(hMemDC, &tm);
-	GetTextExtentPoint32(hMemDC, buf, lstrlen(buf), &sz);
-	TextOut(hMemDC, crt.right * 0.5f - sz.cx, 5, buf, lstrlen(buf));
+	GetTextMetrics(hdc, &tm);
+	GetTextExtentPoint32(hdc, buf, lstrlen(buf), &sz);
+	TextOut(hdc, crt.right * 0.5f - sz.cx, 5, buf, lstrlen(buf));
 
-	SetTextAlign(hMemDC, TA_RIGHT);
-	SetTextColor(hMemDC, RGB(0,0,0));
+	SetTextAlign(hdc, TA_RIGHT);
+	SetTextColor(hdc, RGB(0,0,0));
 	for(int i=1; i<=7; i++){
-		TextOut(hMemDC, drt.left + i * CellGap, drt.top, Days[i], lstrlen(Days[i]));
+		TextOut(hdc, drt.left + i * CellGap, drt.top, Days[i], lstrlen(Days[i]));
 	}
 
 	/*
 	TEXTMETRIC tm;
-	GetTextMetrics(hMemDC, &tm);
-	TextOut(hMemDC, crt.right * 0.5f - tm.tmAveCharWidth * lstrlen(buf), tm.tmHeight * 0.5f, buf, lstrlen(buf));
+	GetTextMetrics(hdc, &tm);
+	TextOut(hdc, crt.right * 0.5f - tm.tmAveCharWidth * lstrlen(buf), tm.tmHeight * 0.5f, buf, lstrlen(buf));
 	*/
 
 	int DofW = DayOfTheWeek(Year, Month, 1);
@@ -361,23 +373,23 @@ void DrawCalendar(HWND hWnd, HDC hdc){
 	for(int i=1; i<=Last; i++){
 		 if(i == Today.wDay) {
 			hPen = CreatePen(PS_SOLID,2,RGB(0,0,0));
-			hOldPen = (HPEN)SelectObject(hMemDC, hPen);
-			hOldBrush = (HBRUSH)SelectObject(hMemDC, GetStockObject(NULL_BRUSH));
-			Rectangle(hMemDC, (x + (DofW+1) * CellGap) - (tm.tmAveCharWidth * 3), y-2, x + (DofW+1) * CellGap + tm.tmAveCharWidth, y + tm.tmHeight + 2);
-			DeleteObject(SelectObject(hMemDC, hOldPen));
-			SelectObject(hMemDC, hOldBrush);
+			hOldPen = (HPEN)SelectObject(hdc, hPen);
+			hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+			Rectangle(hdc, (x + (DofW+1) * CellGap) - (tm.tmAveCharWidth * 3), y-2, x + (DofW+1) * CellGap + tm.tmAveCharWidth, y + tm.tmHeight + 2);
+			DeleteObject(SelectObject(hdc, hOldPen));
+			SelectObject(hdc, hOldBrush);
 		}
 
 		/* i == day */
 		wsprintf(buf, TEXT("%d"), i);
 
-		if(DofW == 0){ SetTextColor(hMemDC, RGB(255, 0,0)); }
-		else{ SetTextColor(hMemDC, RGB(128, 128, 128)); }
+		if(DofW == 0){ SetTextColor(hdc, RGB(255, 0,0)); }
+		else{ SetTextColor(hdc, RGB(128, 128, 128)); }
 
-		TextOut(hMemDC, x + (DofW+1) * CellGap, y, buf, lstrlen(buf));
+		TextOut(hdc, x + (DofW+1) * CellGap, y, buf, lstrlen(buf));
 		if(DofW == 0){
 			/* 1픽셀만큼 늘려서 더 진하게 표시 */
-			TextOut(hMemDC, x + (DofW+1) * CellGap+1, y, buf, lstrlen(buf));
+			TextOut(hdc, x + (DofW+1) * CellGap+1, y, buf, lstrlen(buf));
 		}
 
 		DofW++;
@@ -387,26 +399,18 @@ void DrawCalendar(HWND hWnd, HDC hdc){
 		}
 	}
 
-	SelectObject(hMemDC, hOld);
-	DeleteObject(hFont);
-
-	SelectObject(hMemDC, hOld);
-	DeleteDC(hMemDC);
+	DeleteObject(SelectObject(hdc, hOldFont));
 }
 
-void DrawBitmap(HDC hdc, int x, int y){
-	if(hBitmap == NULL) {return;}
+void SetTrackEvent(HWND hWnd){
+	TRACKMOUSEEVENT EventTrack;
 
-	HDC hMemDC = CreateCompatibleDC(hdc);
-	HGDIOBJ hOld = SelectObject(hMemDC, hBitmap);
+	EventTrack.cbSize = sizeof(TRACKMOUSEEVENT);
+	EventTrack.dwFlags = TME_HOVER | TME_LEAVE;
+	EventTrack.hwndTrack = hWnd;
+	EventTrack.dwHoverTime = 10;
 
-	BITMAP bmp;
-	GetObject(hBitmap, sizeof(BITMAP), &bmp);
-
-	BitBlt(hdc, x, y, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
-
-	SelectObject(hMemDC, hOld);
-	DeleteDC(hMemDC);
+	TrackMouseEvent(&EventTrack);
 }
 
 #include <math.h>
