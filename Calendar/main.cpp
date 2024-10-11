@@ -89,12 +89,28 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	SPLIT TempSplit;
 	int TempCalendarHeight;
 
+	TCHAR buf[0x100];
+	int Year, Month;
+	static TCHAR* Days[] = {
+		TEXT("일"),
+		TEXT("월"),
+		TEXT("화"),
+		TEXT("수"),
+		TEXT("목"),
+		TEXT("금"),
+		TEXT("토")
+	};
+
 	switch(iMessage){
 		case WM_CREATE:
 			iRatio = 60;
 			ListWidth = 200;
 			SplitState = NONE;
 			CreateChildWindow(hWnd);
+
+			GetDate(&Year, &Month);
+			wsprintf(buf, TEXT("%d년 %d월"), Year, Month); 
+			SetWindowText(hBtn[0], buf);
 			return 0;
 
 		case WM_LBUTTONDOWN:
@@ -143,8 +159,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		case WM_SIZE:
 			if(wParam != SIZE_MINIMIZED){
 				SetChildPosition(hWnd, ListWidth, CalendarHeight, iRatio);
+				GetClientRect(hWnd, &crt);
+				int ColumnWidth = crt.right / (sizeof(Days) / sizeof(Days[0]));
+				int ColumnHeight = 
+				SendMessage(hCalendar, LB_SETCOLUMNWIDTH, (WPARAM)ColumnWidth, 0);
 			}
-			InvalidateRect(hWnd, NULL, FALSE);
 			return 0;
 
 		case WM_DESTROY:
@@ -169,16 +188,17 @@ void CreateChildWindow(HWND hWnd){
 				NULL
 			);
 
+	/* 달력 윈도우 리스트 박스 형태로 불가능, 변경 필요 */
 	hCalendar = CreateWindow(
-				TEXT("ListBox"),
-				NULL,
-				WS_VISIBLE | WS_CHILD | WS_BORDER | LBS_NOTIFY | LBS_MULTICOLUMN | LBS_NOINTEGRALHEIGHT,
-				0,0,0,0,
-				hWnd,
-				(HMENU)ID_CALENDAR,
-				hInst,
-				NULL
-			);
+			TEXT("ListBox"),
+			NULL,
+			WS_CHILD | WS_VISIBLE | WS_BORDER | LBS_MULTICOLUMN | LBS_NOINTEGRALHEIGHT | LBS_NOTIFY,
+			0,0,0,0,
+			hWnd,
+			(HMENU)ID_CALENDAR,
+			GetModuleHandle(NULL),
+			NULL
+		);
 
 	hEdit = CreateWindow(
 				TEXT("Edit"),
