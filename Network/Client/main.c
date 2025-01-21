@@ -27,6 +27,7 @@
 #define RCLASSNAME TEXT("ButtonPannelClass")
 
 
+INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK EditPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -36,6 +37,74 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 DWORD WINAPI ClientMain(LPVOID lpArg);
 DWORD WINAPI WorkerThread(LPVOID lpArg);
 
+#define DLGTITLE	L"InputBox"
+#define DLGOK		L"&Ok"
+#define DLGCANCEL	L"&Cancel"
+#define DLGFONT		L"MS Sans Serif"
+#define SIZEOF(str)	(sizeof(str)/sizeof((str)[0]))
+#define IDC_BITMAP 99
+
+#pragma pack(push, 4)                 
+static struct tag_CustomDialog{
+	DWORD	Style; 
+	DWORD	dwExtendedStyle; 
+	WORD	nControl; 
+	short	x; 
+	short	y; 
+	short	cx; 
+	short	cy; 
+	WORD	Menu;							// 메뉴 리소스 서수 지정
+	WORD	WndClass;						// 윈도우 클래스 서수 지정
+	WCHAR	wszTitle[SIZEOF(DLGTITLE)];		// 대화상자 제목 지정
+	short	FontSize;						// DS_SETFONT 스타일 지정 시 폰트 크기 설정
+	WCHAR	wszFont[SIZEOF(DLGFONT)];		// DS_SETFONT 스타일 지정 시 폰트 이름 설정
+
+	// 대화상자 내에 배치할 컨트롤 정보 작성
+	struct {
+		DWORD	Style; 
+		DWORD	ExStyle; 
+		short	x; 
+		short	y; 
+		short	cx; 
+		short	cy; 
+		WORD	ID; 
+		WORD	SysClass;					// 사용자 정의 클래스 지정 ro 미리 등록된 시스템 클래스 설정(0xFFFF)
+		WORD	IDClass;					// SysClass 0xFFFF값 설정 후 시스템 클래스 서수값 설정
+		WCHAR	wszTitle[SIZEOF(DLGOK)];
+		WORD	cbCreationData;				// 다음에 생성될 데이터의 바이트 크기 설정
+		//WORD	wAlign;						// 다음에 생성될 컨트롤을 DWORD 단위로 경계 맞춤
+	}Ok;
+
+	struct {
+		DWORD	Style; 
+		DWORD	ExStyle; 
+		short	x; 
+		short	y; 
+		short	cx; 
+		short	cy; 
+		WORD	ID; 
+		WORD	SysClass;
+		WORD	IDClass;
+		WCHAR	wszTitle[SIZEOF(DLGCANCEL)];
+		WORD	cbCreationData;
+	}Cancel;
+
+	struct {
+		DWORD	Style; 
+		DWORD	ExStyle; 
+		short	x; 
+		short	y; 
+		short	cx; 
+		short	cy; 
+		WORD	ID; 
+		WORD	SysClass;
+		WORD	IDClass;
+		WCHAR	wszTitle[1];				// 리소스 서수나 타이틀 문자 지정
+		WORD	cbCreationData;
+	}Bitmap;
+};
+#pragma pack(pop)
+
 void ShowMessage(TCHAR* buf);
 
 void Exit(); 
@@ -43,6 +112,8 @@ void WSAExit();
 DWORD ErrorMessage();
 DWORD WSAErrorMessage();
 
+void SetParentCenter(HWND hParent, RECT* trt);
+LRESULT CreateCustomDialog(struct tag_CustomDialog CustomTemplate, HWND hOwner, LPVOID lpArg);
 BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
 
 /* 
@@ -50,6 +121,7 @@ BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
 	즉, 서버와 클라이언트가 동일한 객체의 핸들을 소유하고 있어야 할 필요가 없으며 서버는 서버 고유의 입출력 완료 포트 객체를 소유하고
 	클라이언트는 클라이언트 고유의 입출력 완료 포트 객체를 소유하면 된다.
 */
+
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	WSADATA wsa;
 	if(WSAStartup(MAKEWORD(2,2), &wsa) != 0){ Exit(); }
@@ -133,6 +205,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	CloseHandle(hTimer);
 	CloseHandle(hRecvEvent);
 	CloseHandle(hSendEvent);
+	CloseHandle(hConnectEvent);
 
 	HeapFree(GetProcessHeap(), 0, sock);
 	TlsFree(TlsIndex);
@@ -141,22 +214,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	CloseHandle(hMap);
 
 	WSACleanup();
-	return msg.wParam;
+	return (int)msg.wParam;
 }
 
-BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio){
-	RECT rt, srt;
-	GetClientRect(hWnd, &rt);
-
-	int DisplayHeight = (rt.bottom - rt.top) * DisplayPannelRatio / 100;
-	SetRect(&srt, rt.left, DisplayHeight - THICKNESS, rt.right - rt.left, DisplayHeight);
-
-	if(PtInRect(&srt, pt)){
-		return TRUE;
-	}
-
-	return FALSE;
-}
 
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	static HWND hTopPannel, hLeftPannel, hRightPannel;
@@ -174,6 +234,45 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	static DWORD dwThreadID;
 	HANDLE hClientMainThread, hConnectEvent;
 	DWORD dwThread, dwConnect, dwExitCode;
+
+	static struct tag_CustomDialog CustomTemplate = {  // style  0x94c800c4
+		WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_3DLOOK | DS_SETFONT,
+		0x0,						// ExStyle;
+		3,							// nControls
+		0, 0, 300, 180,
+		0,							// Menu
+		0,							// WndClass
+		DLGTITLE,					// Caption
+		8,							// FontSize
+		DLGFONT,
+
+		{
+			WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_DEFPUSHBUTTON,   // 0x50030001
+			WS_EX_NOPARENTNOTIFY,	// 0x4
+			190,160,50,14,
+			IDOK,
+			0xFFFF, 0x0080,			// Button
+			DLGOK, 0,
+		},
+
+		{
+			WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,    // 0x50010000
+			WS_EX_NOPARENTNOTIFY,	// 0x4
+			244,160,50,14,
+			IDCANCEL,
+			0xFFFF, 0x0080,			// Button
+			DLGCANCEL, 0,
+		},
+
+		{
+			WS_CHILD | WS_VISIBLE | WS_GROUP | SS_LEFT,    // 0x50020000
+			WS_EX_NOPARENTNOTIFY,	// 0x4
+			6,6,288,8,
+			IDC_BITMAP,
+			0xFFFF, 0x0082,			// static
+			L"", 0,
+		},
+	};
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -202,6 +301,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					switch(HIWORD(wParam)){
 						case BN_CLICKED:
 							// TODO : 대화상자 만들고 서버 IP,Port 직접 입력하게 끔 설계, 상태값을 유지할 수 있는 체크 버튼으로 만들 것.
+							CreateCustomDialog(CustomTemplate, hWnd, NULL);
 							SetTimer(hWnd, 1, 10000, NULL);
 							hClientMainThread = CreateThread(NULL, 0, ClientMain, NULL, 0, &dwThreadID);
 							if(hClientMainThread){ CloseHandle(hClientMainThread); }
@@ -359,7 +459,7 @@ LRESULT CALLBACK EditSubProc(HWND hWnd,UINT iMessage,WPARAM wParam,LPARAM lParam
 
 		case WM_KEYDOWN:
 			if(hBtn == NULL){
-				hBtnPannel = FindWindowEx(GetParent(GetParent(hWnd)), NULL, TEXT("ButtonPannelClass"), NULL);
+				hBtnPannel = FindWindowEx(GetParent(GetParent(hWnd)), NULL, RCLASSNAME, NULL);
 				hBtn = FindWindowEx(hBtnPannel, NULL, TEXT("button"), TEXT("Send"));
 			}
 
@@ -587,7 +687,42 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	return 0;
 }
 
+/* DialogBox */
+INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
+	switch(iMessage){
+		case WM_INITDIALOG:
+			return TRUE;
+
+		case WM_COMMAND:
+			switch(LOWORD(wParam)){
+				case IDOK:
+					return TRUE;
+					
+				case IDCANCEL:
+					EndDialog(hWnd, LOWORD(wParam));
+					return TRUE;
+			}
+			break;
+	}
+
+	return FALSE;
+}
+
 /* Utility */
+BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio){
+	RECT rt, srt;
+	GetClientRect(hWnd, &rt);
+
+	int DisplayHeight = (rt.bottom - rt.top) * DisplayPannelRatio / 100;
+	SetRect(&srt, rt.left, DisplayHeight - THICKNESS, rt.right - rt.left, DisplayHeight);
+
+	if(PtInRect(&srt, pt)){
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 void ShowMessage(TCHAR* buf){
 	MessageBox(HWND_DESKTOP, buf, TEXT("Warning"), MB_ICONWARNING | MB_OK);
 }
@@ -652,5 +787,21 @@ DWORD WSAErrorMessage(){
 	LocalFree(lpMsgBuf);
 
 	return (DWORD)err;
+}
+
+void SetParentCenter(HWND hParent, RECT* trt){
+	RECT prt;
+
+	GetWindowRect(hParent, &prt);
+
+	LONG iWidth = trt->right - trt->left;
+	LONG iHeight = trt->bottom - trt->top;
+	
+	trt->left = prt.right - iWidth >> 1;
+	trt->top = prt.bottom - iHeight >> 1;
+}
+
+LRESULT CreateCustomDialog(struct tag_CustomDialog CustomTemplate, HWND hOwner, LPVOID lpArg) {
+	return DialogBoxIndirectParam(GetModuleHandle(NULL), (LPCDLGTEMPLATEW)&CustomTemplate, hOwner, (DLGPROC)DialogProc, (LPARAM)lpArg);
 }
 
