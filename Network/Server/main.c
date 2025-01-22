@@ -56,7 +56,6 @@ struct tag_InputArguments{
 };
 
 /* Util */
-int ConvertIP(const TCHAR *IP);
 void ShowText(const char* fmt, ...);
 void ShowError(const char* Error);
 wchar_t* ConvertCharset(const char* MBuf);
@@ -697,32 +696,6 @@ void ShowError(const char* Error){
 
 	ShowText("%s : %s\r\n", Error, (char*)lpMsgBuf);
 	LocalFree(lpMsgBuf);
-}
-
-int ConvertIP(const TCHAR *IP){
-	if(IP == NULL){return -1;}
-
-	int Per = 3;
-	int Bit = 8;
-	int Radix = 16;
-	int Value = 0;
-	int Result = 0;
-	const TCHAR *ptr = IP;
-
-	for(ptr; *ptr; ptr++){
-		if(*ptr >= '0' && *ptr <= '9'){
-			Value *= 10;
-			Value += *ptr - '0';
-		}else if(*ptr == '.'){
-			Result |= Value << Bit * Per;
-			Per--;
-			Value = 0;
-		}
-	}
-
-	Result |= Value;
-
-	return Result;
 }
 
 wchar_t* ConvertCharset(const char* MBuf){

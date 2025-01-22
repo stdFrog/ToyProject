@@ -5,11 +5,16 @@
 #include <windows.h>
 #include <winsock2.h>
 
-#define IDC_BTNSEND 101
-#define IDC_EDMSG 201
-#define ID_CONFIGCONNECT 40001
-// #define THICKNESS GetSystemMetrics(SM_CYSIZEFRAME)
+#define IDC_BTNSEND			101
+#define IDC_EDMSG			201
+
+#define IDC_DLGEDIPADDRESS	1101
+#define IDC_DLGEDPORT		1201
+
+#define ID_CONFIGCONNECT	40001
+
 #define THICKNESS 3
+// #define THICKNESS GetSystemMetrics(SM_CYSIZEFRAME)
 
 #define SERVERIP "127.0.0.1"
 #define SERVERPORT 9000
@@ -37,12 +42,20 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 DWORD WINAPI ClientMain(LPVOID lpArg);
 DWORD WINAPI WorkerThread(LPVOID lpArg);
 
-#define DLGTITLE	L"InputBox"
-#define DLGOK		L"&Ok"
-#define DLGCANCEL	L"&Cancel"
-#define DLGFONT		L"MS Sans Serif"
+void ShowMessage(TCHAR* buf);
+
+void Exit(); 
+void WSAExit();
+DWORD ErrorMessage();
+DWORD WSAErrorMessage();
+
+int ConvertIP(const TCHAR *IP);
+BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
+
+/* Indirect Dialog */
+#define DLGTITLE	TEXT("InputBox")
+#define DLGFONT		TEXT("MS Sans Serif")
 #define SIZEOF(str)	(sizeof(str)/sizeof((str)[0]))
-#define IDC_BITMAP 99
 
 #pragma pack(push, 4)                 
 static struct tag_CustomDialog{
@@ -56,65 +69,12 @@ static struct tag_CustomDialog{
 	WORD	Menu;							// 메뉴 리소스 서수 지정
 	WORD	WndClass;						// 윈도우 클래스 서수 지정
 	WCHAR	wszTitle[SIZEOF(DLGTITLE)];		// 대화상자 제목 지정
-	short	FontSize;						// DS_SETFONT 스타일 지정 시 폰트 크기 설정
+	short	FontSize;						// DS_SETFONT 스타일 지정 시 폰트 크기 설정(픽셀)
 	WCHAR	wszFont[SIZEOF(DLGFONT)];		// DS_SETFONT 스타일 지정 시 폰트 이름 설정
-
-	// 대화상자 내에 배치할 컨트롤 정보 작성
-	struct {
-		DWORD	Style; 
-		DWORD	ExStyle; 
-		short	x; 
-		short	y; 
-		short	cx; 
-		short	cy; 
-		WORD	ID; 
-		WORD	SysClass;					// 사용자 정의 클래스 지정 ro 미리 등록된 시스템 클래스 설정(0xFFFF)
-		WORD	IDClass;					// SysClass 0xFFFF값 설정 후 시스템 클래스 서수값 설정
-		WCHAR	wszTitle[SIZEOF(DLGOK)];
-		WORD	cbCreationData;				// 다음에 생성될 데이터의 바이트 크기 설정
-		//WORD	wAlign;						// 다음에 생성될 컨트롤을 DWORD 단위로 경계 맞춤
-	}Ok;
-
-	struct {
-		DWORD	Style; 
-		DWORD	ExStyle; 
-		short	x; 
-		short	y; 
-		short	cx; 
-		short	cy; 
-		WORD	ID; 
-		WORD	SysClass;
-		WORD	IDClass;
-		WCHAR	wszTitle[SIZEOF(DLGCANCEL)];
-		WORD	cbCreationData;
-	}Cancel;
-
-	struct {
-		DWORD	Style; 
-		DWORD	ExStyle; 
-		short	x; 
-		short	y; 
-		short	cx; 
-		short	cy; 
-		WORD	ID; 
-		WORD	SysClass;
-		WORD	IDClass;
-		WCHAR	wszTitle[1];				// 리소스 서수나 타이틀 문자 지정
-		WORD	cbCreationData;
-	}Bitmap;
 };
 #pragma pack(pop)
 
-void ShowMessage(TCHAR* buf);
-
-void Exit(); 
-void WSAExit();
-DWORD ErrorMessage();
-DWORD WSAErrorMessage();
-
-void SetParentCenter(HWND hParent, RECT* trt);
-LRESULT CreateCustomDialog(struct tag_CustomDialog CustomTemplate, HWND hOwner, LPVOID lpArg);
-BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
+LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
 
 /* 
 	모듈 내부에서 생성한 핸들은 해당 프로세스가 생성한 스레드간에 공유될 수 있으나 다른 프로세스와는 공유할 수 없다.
@@ -217,7 +177,6 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	return (int)msg.wParam;
 }
 
-
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	static HWND hTopPannel, hLeftPannel, hRightPannel;
 	static BOOL bSplit = FALSE;
@@ -228,6 +187,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	HDC hdc;
 
 	RECT rt, srt;
+	static RECT mrt;
+
 	POINT pt;
 	HMENU hMenu, hPopup;
 	
@@ -235,43 +196,16 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	HANDLE hClientMainThread, hConnectEvent;
 	DWORD dwThread, dwConnect, dwExitCode;
 
-	static struct tag_CustomDialog CustomTemplate = {  // style  0x94c800c4
+	static struct tag_CustomDialog MyDlg = {
 		WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | DS_MODALFRAME | DS_3DLOOK | DS_SETFONT,
-		0x0,						// ExStyle;
-		3,							// nControls
-		0, 0, 300, 180,
-		0,							// Menu
-		0,							// WndClass
-		DLGTITLE,					// Caption
-		8,							// FontSize
+		0x0,
+		0,
+		0,0,0,0,
+		0,
+		0,
+		DLGTITLE,
+		8,							// DLU 변환 필요
 		DLGFONT,
-
-		{
-			WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_GROUP | BS_DEFPUSHBUTTON,   // 0x50030001
-			WS_EX_NOPARENTNOTIFY,	// 0x4
-			190,160,50,14,
-			IDOK,
-			0xFFFF, 0x0080,			// Button
-			DLGOK, 0,
-		},
-
-		{
-			WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,    // 0x50010000
-			WS_EX_NOPARENTNOTIFY,	// 0x4
-			244,160,50,14,
-			IDCANCEL,
-			0xFFFF, 0x0080,			// Button
-			DLGCANCEL, 0,
-		},
-
-		{
-			WS_CHILD | WS_VISIBLE | WS_GROUP | SS_LEFT,    // 0x50020000
-			WS_EX_NOPARENTNOTIFY,	// 0x4
-			6,6,288,8,
-			IDC_BITMAP,
-			0xFFFF, 0x0082,			// static
-			L"", 0,
-		},
 	};
 
 	switch(iMessage){
@@ -287,12 +221,13 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			AppendMenu(hPopup, MF_STRING, ID_CONFIGCONNECT,TEXT("연결 설정"));
 			SetMenu(hWnd, hMenu);
 
-			SetRect(&srt, 0,0, 530, 640);
-			AdjustWindowRect(&srt, GetWindowLongPtr(hWnd, GWL_STYLE), GetMenu(hWnd) != NULL);
-			SetWindowPos(hWnd, NULL, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, SWP_NOZORDER | SWP_NOMOVE);
+			SetRect(&mrt, 0,0, 530, 640);
+			AdjustWindowRect(&mrt, GetWindowLongPtr(hWnd, GWL_STYLE), GetMenu(hWnd) != NULL);
+			SetWindowPos(hWnd, NULL, mrt.left, mrt.top, mrt.right - mrt.left, mrt.bottom - mrt.top, SWP_NOZORDER | SWP_NOMOVE);
 			return 0;
 
 		case WM_INITMENU:
+			/* 그릴 거 있으면 추가하고 return */
 			break;
 
 		case WM_COMMAND:
@@ -300,12 +235,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				case ID_CONFIGCONNECT:
 					switch(HIWORD(wParam)){
 						case BN_CLICKED:
-							// TODO : 대화상자 만들고 서버 IP,Port 직접 입력하게 끔 설계, 상태값을 유지할 수 있는 체크 버튼으로 만들 것.
-							CreateCustomDialog(CustomTemplate, hWnd, NULL);
-							SetTimer(hWnd, 1, 10000, NULL);
-							hClientMainThread = CreateThread(NULL, 0, ClientMain, NULL, 0, &dwThreadID);
-							if(hClientMainThread){ CloseHandle(hClientMainThread); }
-							else{ ErrorMessage(); }
+							if(IDOK == CreateCustomDialog(MyDlg, hWnd, NULL)){
+								hClientMainThread = CreateThread(NULL, 0, ClientMain, NULL, 0, &dwThreadID);
+								if(hClientMainThread){ 
+									CloseHandle(hClientMainThread);
+									SetTimer(hWnd, 1, 10000, NULL);
+								}
+								else{ ErrorMessage(); }
+							}
 							break;
 					}
 					break;
@@ -555,6 +492,66 @@ LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPAR
 	return (DefWindowProc(hWnd, iMessage, wParam, lParam));
 }
 
+/* DialogProc */
+INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
+	static HWND hDlgControl[4];
+	RECT prt, srt;
+	LONG X,Y, iDlgWidth, iDlgHeight;
+
+	switch(iMessage){
+		case WM_INITDIALOG:
+			#define OKCONTROL 0
+			#define CANCELCONTROL 1
+			#define IPCONTROL 2
+			#define PORTCONTROL 3
+
+			/* 중앙 정렬 */
+			GetWindowRect(hWnd, &srt);
+			SetRect(&srt, srt.left, srt.top, srt.left + 300, srt.top + 180);
+			MapDialogRect(hWnd, &srt);
+			AdjustWindowRect(&srt, WS_POPUPWINDOW | WS_DLGFRAME, FALSE);
+			GetWindowRect(GetWindow(hWnd, GW_OWNER), &prt);
+
+			iDlgWidth = srt.right - srt.left;
+			iDlgHeight = srt.bottom - srt.top;
+			X = prt.left + ((prt.right - prt.left) - iDlgWidth) / 2;
+			Y = prt.top + ((prt.bottom  - prt.top) - iDlgHeight) / 2;
+			SetRect(&srt, X, Y, X + iDlgWidth, Y+ iDlgHeight);
+
+			SetWindowPos(hWnd, NULL, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, SWP_NOZORDER);
+
+			/* 컨트롤 추가 */
+			SetRect(&srt, 190, 160, 190 + 50, 160 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[OKCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("OK"), WS_VISIBLE | WS_CHILD | WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDOK, GetModuleHandle(NULL), NULL);
+			SetRect(&srt, 244, 160, 244 + 50, 160 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[CANCELCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("Cancel"), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | BS_PUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDCANCEL, GetModuleHandle(NULL), NULL);
+
+			SetRect(&srt, 6, 6, 6 + 120, 6 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[IPCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDIPADDRESS, GetModuleHandle(NULL), NULL);
+			SetRect(&srt, 136, 6, 136 + 120, 6 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
+			return TRUE;
+
+		case WM_NOTIFY:
+			return TRUE;
+
+		case WM_COMMAND:
+			switch(LOWORD(wParam)){
+				case IDOK:
+				case IDCANCEL:
+					EndDialog(hWnd, LOWORD(wParam));
+					return TRUE;
+			}
+			break;
+	}
+
+	return FALSE;
+}
+
 /* Multi Thread */
 struct tag_Info{
 	SOCKET sock;
@@ -687,28 +684,42 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	return 0;
 }
 
-/* DialogBox */
-INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
-	switch(iMessage){
-		case WM_INITDIALOG:
-			return TRUE;
+/* Utility */
+LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg){
+	HINSTANCE hInst;
 
-		case WM_COMMAND:
-			switch(LOWORD(wParam)){
-				case IDOK:
-					return TRUE;
-					
-				case IDCANCEL:
-					EndDialog(hWnd, LOWORD(wParam));
-					return TRUE;
-			}
-			break;
-	}
+	if(hOwner == NULL){ hInst = GetModuleHandle(NULL); }
+	else{ hInst = (HINSTANCE)GetWindowLongPtr(hOwner, GWLP_HINSTANCE); }
 
-	return FALSE;
+	return DialogBoxIndirectParamW(hInst, (LPCDLGTEMPLATEW)&Template, hOwner, (DLGPROC)DialogProc, (LPARAM)lpArg);
 }
 
-/* Utility */
+int ConvertIP(const TCHAR *IP){
+	if(IP == NULL){return -1;}
+
+	int Per = 3;
+	int Bit = 8;
+	int Radix = 16;
+	int Value = 0;
+	int Result = 0;
+	const TCHAR *ptr = IP;
+
+	for(ptr; *ptr; ptr++){
+		if(*ptr >= '0' && *ptr <= '9'){
+			Value *= 10;
+			Value += *ptr - '0';
+		}else if(*ptr == '.'){
+			Result |= Value << Bit * Per;
+			Per--;
+			Value = 0;
+		}
+	}
+
+	Result |= Value;
+
+	return Result;
+}
+
 BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio){
 	RECT rt, srt;
 	GetClientRect(hWnd, &rt);
@@ -787,21 +798,5 @@ DWORD WSAErrorMessage(){
 	LocalFree(lpMsgBuf);
 
 	return (DWORD)err;
-}
-
-void SetParentCenter(HWND hParent, RECT* trt){
-	RECT prt;
-
-	GetWindowRect(hParent, &prt);
-
-	LONG iWidth = trt->right - trt->left;
-	LONG iHeight = trt->bottom - trt->top;
-	
-	trt->left = prt.right - iWidth >> 1;
-	trt->top = prt.bottom - iHeight >> 1;
-}
-
-LRESULT CreateCustomDialog(struct tag_CustomDialog CustomTemplate, HWND hOwner, LPVOID lpArg) {
-	return DialogBoxIndirectParam(GetModuleHandle(NULL), (LPCDLGTEMPLATEW)&CustomTemplate, hOwner, (DLGPROC)DialogProc, (LPARAM)lpArg);
 }
 
