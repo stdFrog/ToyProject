@@ -227,7 +227,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			return 0;
 
 		case WM_INITMENU:
-			/* 그릴 거 있으면 추가하고 return */
+			/* TODO: 연결 상태를 체크 모양으로 표시 */ 
 			break;
 
 		case WM_COMMAND:
@@ -236,6 +236,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 					switch(HIWORD(wParam)){
 						case BN_CLICKED:
 							if(IDOK == CreateCustomDialog(MyDlg, hWnd, NULL)){
+								/* TODO: 아이템 확인 후 데이터 유효한지 검사하고 스레드 실행 */
 								hClientMainThread = CreateThread(NULL, 0, ClientMain, NULL, 0, &dwThreadID);
 								if(hClientMainThread){ 
 									CloseHandle(hClientMainThread);
@@ -520,20 +521,20 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 
 			SetWindowPos(hWnd, NULL, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, SWP_NOZORDER);
 
-			/* 컨트롤 추가 */
+			/* 컨트롤 추가, TODO: IP 입력용 공통 컨트롤로 변경, Static 컨트롤 추가해서 설명 추가 */
+			SetRect(&srt, 6, 6, 6 + 120, 6 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[IPCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDIPADDRESS, GetModuleHandle(NULL), NULL);
+			SetRect(&srt, 136, 6, 136 + 120, 6 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
+
 			SetRect(&srt, 190, 160, 190 + 50, 160 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[OKCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("OK"), WS_VISIBLE | WS_CHILD | WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDOK, GetModuleHandle(NULL), NULL);
 			SetRect(&srt, 244, 160, 244 + 50, 160 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[CANCELCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("Cancel"), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | BS_PUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDCANCEL, GetModuleHandle(NULL), NULL);
-
-			SetRect(&srt, 6, 6, 6 + 120, 6 + 18);
-			MapDialogRect(hWnd, &srt);
-			hDlgControl[IPCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDIPADDRESS, GetModuleHandle(NULL), NULL);
-			SetRect(&srt, 136, 6, 136 + 120, 6 + 18);
-			MapDialogRect(hWnd, &srt);
-			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
 			return TRUE;
 
 		case WM_NOTIFY:
