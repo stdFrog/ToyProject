@@ -4,6 +4,8 @@
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <winsock2.h>
+#include <commctrl.h>
+#include <stdio.h>
 
 #define IDC_BTNSEND			101
 #define IDC_EDMSG			201
@@ -74,6 +76,11 @@ static struct tag_CustomDialog{
 };
 #pragma pack(pop)
 
+static struct tag_DlgInOut{
+	ATOM IPAtom;
+	ATOM PortAtom;
+};
+
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
 
 /* 
@@ -85,6 +92,9 @@ LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	WSADATA wsa;
 	if(WSAStartup(MAKEWORD(2,2), &wsa) != 0){ Exit(); }
+
+	INITCOMMONCONTROLSEX icex = {sizeof(icex), ICC_DATE_CLASSES};
+	if(!InitCommonControlsEx(&icex)){ Exit(); }
 
 	HANDLE hCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0,0);
 	if(hCP == NULL){ Exit(); }
@@ -181,6 +191,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	static HWND hTopPannel, hLeftPannel, hRightPannel;
 	static BOOL bSplit = FALSE;
 	static int DisplayPannelRatio;
+
 	int DisplayHeight;
 
 	PAINTSTRUCT ps;
@@ -207,6 +218,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		8,							// DLU 변환 필요
 		DLGFONT,
 	};
+
+	static struct tag_DlgInOut DlgInOut;
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -235,9 +248,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				case ID_CONFIGCONNECT:
 					switch(HIWORD(wParam)){
 						case BN_CLICKED:
-							if(IDOK == CreateCustomDialog(MyDlg, hWnd, NULL)){
+							if(IDOK == CreateCustomDialog(MyDlg, hWnd, &DlgInOut)){
 								/* TODO: 아이템 확인 후 데이터 유효한지 검사하고 스레드 실행 */
-								hClientMainThread = CreateThread(NULL, 0, ClientMain, NULL, 0, &dwThreadID);
+								hClientMainThread = CreateThread(NULL, 0, ClientMain, &DlgInOut, 0, &dwThreadID);
 								if(hClientMainThread){ 
 									CloseHandle(hClientMainThread);
 									SetTimer(hWnd, 1, 10000, NULL);
@@ -343,7 +356,14 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 		case WM_DESTROY:
 			KillTimer(hWnd, 1);
-			if(hClientMainThread != NULL){ CloseHandle(hClientMainThread); }
+			if(FindAtomA((LPCSTR)DlgInOut.IPAtom) != 0) { DeleteAtom(DlgInOut.IPAtom); }
+			if(FindAtomA((LPCSTR)DlgInOut.PortAtom) != 0) { DeleteAtom(DlgInOut.PortAtom); }
+			// if(FindAtom((LPTSTR)DlgInOut.IPAtom) != 0) { DeleteAtom(DlgInOut.IPAtom); }
+			// if(FindAtom((LPTSTR)DlgInOut.PortAtom) != 0) { DeleteAtom(DlgInOut.PortAtom); }
+			if(hClientMainThread != NULL){
+				/* TODO: 종료전에 종료 데이터 전송 */
+				CloseHandle(hClientMainThread);
+			}
 			PostQuitMessage(0);
 			return 0;
 	}
@@ -452,9 +472,7 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 								ClientMain 스레드 작성 완료 01.19.일
 								서버 연결까지 완료
 
-								TODO :	1.	서버에 데이터 전송할 스레드 실행(01.20.월 - 완료)
-										2.	전송한 데이터는 곧바로 서버가 접속한 모든 사람에게 반환(에코)하므로 Recv 이벤트 실행(전송이 성공적으로 완료되었는지 확인 가능)
-										3.	전송한 데이터를 DisplayPannelClass로 전달
+								TODO: 공유 데이터 열어서 SendEvent 활성화 및 WSASend 호출
 							*/
 						}
 
@@ -495,16 +513,27 @@ LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPAR
 
 /* DialogProc */
 INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
-	static HWND hDlgControl[4];
+	static HWND hDlgControl[6];
 	RECT prt, srt;
 	LONG X,Y, iDlgWidth, iDlgHeight;
+
+	DWORD dwAddress, dwPort;
+	BOOL bSucceeded;
+	TCHAR ResultW[0x100];
+	char ResultA[0x50];
+
+	static struct tag_DlgInOut* DlgInOut;
 
 	switch(iMessage){
 		case WM_INITDIALOG:
 			#define OKCONTROL 0
 			#define CANCELCONTROL 1
-			#define IPCONTROL 2
-			#define PORTCONTROL 3
+			#define IPSTATIC 2
+			#define PORTSTATIC 3
+			#define IPCONTROL 4
+			#define PORTCONTROL 5
+
+			DlgInOut = (struct tag_DlgInOut*)lParam;
 
 			/* 중앙 정렬 */
 			GetWindowRect(hWnd, &srt);
@@ -521,28 +550,100 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 
 			SetWindowPos(hWnd, NULL, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, SWP_NOZORDER);
 
-			/* 컨트롤 추가, TODO: IP 입력용 공통 컨트롤로 변경, Static 컨트롤 추가해서 설명 추가 */
+			/* 컨트롤 추가, TODO: IP 입력용 공통 컨트롤로 변경, Static 컨트롤 추가(01.23 완) */
 			SetRect(&srt, 6, 6, 6 + 120, 6 + 18);
 			MapDialogRect(hWnd, &srt);
-			hDlgControl[IPCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDIPADDRESS, GetModuleHandle(NULL), NULL);
-			SetRect(&srt, 136, 6, 136 + 120, 6 + 18);
+			hDlgControl[IPSTATIC] = CreateWindow(TEXT("static"), TEXT("IP"), WS_VISIBLE | WS_CHILD | SS_LEFT, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+
+			SetRect(&srt, 6, 26, 6 + 120, 26 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[IPCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, WC_IPADDRESS, NULL, WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDIPADDRESS, GetModuleHandle(NULL), NULL);
+			SendMessage(hDlgControl[IPCONTROL], IPM_SETRANGE, (WPARAM)0, (LPARAM)MAKEIPRANGE(127, 255));		// 0번째 필드는 상한, 하한 설정
+
+			SetRect(&srt, 6, 46, 6 + 120, 46 + 18);
+			MapDialogRect(hWnd, &srt);
+			hDlgControl[PORTSTATIC] = CreateWindow(TEXT("static"), TEXT("PORT"), WS_VISIBLE | WS_CHILD | SS_LEFT, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+
+			SetRect(&srt, 6, 66, 6 + 120, 66 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
+			SendMessage(hDlgControl[PORTCONTROL], EM_LIMITTEXT, (WPARAM)5, (LPARAM)0);							// Port는 최대 5자리까지만 입력
 
 			SetRect(&srt, 190, 160, 190 + 50, 160 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[OKCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("OK"), WS_VISIBLE | WS_CHILD | WS_GROUP | WS_TABSTOP | BS_DEFPUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDOK, GetModuleHandle(NULL), NULL);
+
 			SetRect(&srt, 244, 160, 244 + 50, 160 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[CANCELCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("button"), TEXT("Cancel"), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | BS_PUSHBUTTON, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDCANCEL, GetModuleHandle(NULL), NULL);
 			return TRUE;
 
+			// typedef struct tagNMIPADDRESS {
+			// 	NMHDR	hdr;
+			// 	int		iField;
+			// 	int		iValue;
+			// }NMIPADDRESS, *LPNMIPADDRESS;
+
+			/*
 		case WM_NOTIFY:
-			return TRUE;
+			switch(((LPNMHDR)lParam)->code){
+				case IPN_FIELDCHANGED:
+					((LPNMIPADDRESS)lParam)->;
+					return TRUE;
+			}
+			break;
+			*/
 
 		case WM_COMMAND:
 			switch(LOWORD(wParam)){
+				case IDC_DLGEDPORT:
+					switch(HIWORD(wParam)){
+						case EN_SETFOCUS:
+							SendMessage(hDlgControl[PORTCONTROL], EM_SETSEL, (WPARAM)0, (LPARAM)-1);
+							return TRUE;
+					}
+					break;
+
 				case IDOK:
+					#define RESERVE		1024
+					#define WELLKNOWN	1024
+					#define DYNAMIC		0xC000		// 49152
+					#define PRIVATE		0xC000		// 49152
+					if(SendMessage(hDlgControl[IPCONTROL], IPM_GETADDRESS, 0, (LPARAM)&dwAddress) != 4){ 
+						ShowMessage(TEXT("Invalid IP.\r\nPlease fill it out correctly and try again.")); 
+						return TRUE;
+					}
+
+					if(GetDlgItemInt(hWnd, IDC_DLGEDPORT, &bSucceeded, FALSE) < RESERVE){ 
+						return TRUE;
+					}
+
+					if(GetDlgItemInt(hWnd, IDC_DLGEDPORT, &bSucceeded, FALSE) >= DYNAMIC ){
+						ShowMessage(TEXT("You can't use port numbers between 49152 ~ 65535.\r\nPlease try again (Error: Private Zone)"));
+						return TRUE;
+					}
+
+					wsprintf(ResultW, TEXT("%d.%d.%d.%d"), FIRST_IPADDRESS(dwAddress), SECOND_IPADDRESS(dwAddress), THIRD_IPADDRESS(dwAddress), FOURTH_IPADDRESS(dwAddress));
+					if(WideCharToMultiByte(CP_ACP, 0, ResultW, -1, ResultA, 0x50, NULL, NULL) == 0){
+						ErrorMessage();
+						return TRUE;
+					}
+
+					dwPort = (DWORD)GetDlgItemInt(hWnd, IDC_DLGEDPORT, &bSucceeded, FALSE);
+					DlgInOut->IPAtom = AddAtomA(ResultA);									// 0xFFFF까지 유효범위 대소문자 구분
+					// DlgInOut->IPAtom = AddAtom(ResultW);
+					if(DlgInOut->IPAtom == 0){
+						ErrorMessage();
+						return TRUE;
+					}
+
+					DlgInOut->PortAtom = AddAtomA((LPCSTR)(WORD)(DWORD)(dwPort));			// 0xBFFF까지 유효범위 #dddd형태
+					// DlgInOut->PortAtom = AddAtom((LPTSTR)(WORD)(DWORD)dwPort);
+					if(DlgInOut->PortAtom == 0){
+						ErrorMessage();
+						return TRUE;
+					}
+
 				case IDCANCEL:
 					EndDialog(hWnd, LOWORD(wParam));
 					return TRUE;
@@ -566,6 +667,8 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	TCHAR* rdPtr;
 	DWORD TlsIndex;
 
+	struct tag_DlgInOut* DlgInOut = (struct tag_DlgInOut*)lpArg;
+
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
 	if(hMap == NULL){ return ErrorMessage();}
 
@@ -580,9 +683,23 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	if(*sock == INVALID_SOCKET){ return WSAErrorMessage(); }
 
 	struct sockaddr_in Server;
+	// TCHAR IPAddressW[INET_ADDRSTRLEN * 2];
+	// TCHAR szPortW[0x10 * 2];
+	char IPAddressA[INET_ADDRSTRLEN];
+	char szPortA[0x10];
+
+	// if(GetAtomName(DlgInOut->IPAtom, IPAddressW, INET_ADDRSTRLEN * 2) == 0){ return ErrorMessage(); }
+	// if(GetAtomName(DlgInOut->PortAtom, szPortW, 0x10 * 2) == 0){ return ErrorMessage(); }
+	// if(WideCharToMultiByte(CP_UTF8, 0, IPAddressW, -1, IPAddressA, INET_ADDRSTRLEN, NULL, NULL) == 0){ return ErrorMessage(); }
+	// short unsigned int uhdPort = _wtoi(szPortW + 1);
+
+	if(GetAtomNameA(DlgInOut->IPAtom, IPAddressA, INET_ADDRSTRLEN) == 0){ return ErrorMessage(); }
+	if(GetAtomNameA(DlgInOut->PortAtom, szPortA, 0x10) == 0){ return ErrorMessage(); }
+	short unsigned int uhdPort = atoi(szPortA + 1);
+
 	Server.sin_family = AF_INET;
-	inet_pton(AF_INET, SERVERIP, &Server.sin_addr);
-	Server.sin_port = htons(SERVERPORT);
+	inet_pton(AF_INET, IPAddressA /* SERVERIP */, &Server.sin_addr);
+	Server.sin_port = htons(uhdPort /* SERVERPORT */);
 
 	int ret = connect(*sock, (struct sockaddr*)&Server, sizeof(Server));
 	if(ret == SOCKET_ERROR){ return WSAErrorMessage();}
@@ -602,7 +719,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	HANDLE hTimer = OpenWaitableTimer(TIMER_MODIFY_STATE, FALSE, TIMERID);
 	if(hTimer == NULL){ return ErrorMessage(); }
 
-	#define PERIOD 5000
+	#define PERIOD 60000
 	LARGE_INTEGER DueTime = {0,};
 	SetWaitableTimer(hTimer, &DueTime, (LONG)PERIOD, NULL, NULL, FALSE);
 
@@ -622,7 +739,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 		switch(dwExitCode){
 			/* OpenEvent Failed */
 			case ERROR_INVALID_HANDLE:
-				ShowMessage(TEXT("The data required for communication has not been initialized. Please re-run the program."));
+				ShowMessage(TEXT("The data required for communication has not been initialized.\r\nPlease re-run the program."));
 				ExitProcess(GetLastError());
 				break;
 
@@ -645,7 +762,7 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	if(hSendEvent == NULL){ return ErrorMessage(); }
 
 	while(1){
-		if(GetQueuedCompletionStatus(Info->hCP, &dwTransferred, NULL, (LPOVERLAPPED*)&ov, INFINITE)){
+		if(GetQueuedCompletionStatus( Info->hCP, &dwTransferred, NULL, (LPOVERLAPPED*)&ov, INFINITE)){
 			dwEvent = WaitForSingleObject(hSendEvent, 0);
 
 			switch(dwEvent){
@@ -663,7 +780,6 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 					ErrorMessage();
 					break;
 			}
-
 		}else{
 			/* 호출 처리중 CompletionPort 핸들 닫히면 실패하고 FALSE 반환 */
 			dwError = GetLastError();
