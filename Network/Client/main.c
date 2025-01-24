@@ -1,39 +1,43 @@
-#define _WIN32_WINNT 0x0A00
 #define UNICODE
+#define _WIN32_WINNT 0x0A00
+#define WIN32_LEAN_AND_MEAN
 
 #include <ws2tcpip.h>
 #include <windows.h>
 #include <winsock2.h>
 #include <commctrl.h>
-#include <stdio.h>
+#include <strsafe.h>
 
+/* Main Window Control ID */
 #define IDC_BTNSEND			101
 #define IDC_EDMSG			201
 
+/* Dialog Control ID */
 #define IDC_DLGEDIPADDRESS	1101
 #define IDC_DLGEDPORT		1201
 
+/* Menu ID */
 #define ID_CONFIGCONNECT	40001
 
-#define THICKNESS 3
-// #define THICKNESS GetSystemMetrics(SM_CYSIZEFRAME)
+#define THICKNESS			3
+//#define THICKNESS			GetSystemMetrics(SM_CYSIZEFRAME)
+//#define SERVERIP			"127.0.0.1"
+//#define SERVERPORT		9000
 
-#define SERVERIP "127.0.0.1"
-#define SERVERPORT 9000
+/* ID of the Sync Object. */
+#define RECVEVENTID			TEXT("Local\\ExampleRecvEvent_25_01_20")
+#define SENDEVENTID			TEXT("Local\\ExampleSendEvent_25_01_20")
+#define CONNECTEVENTID		TEXT("Local\\ExampleConnectEvent_25_01_20")
 
-#define RECVEVENTID TEXT("Local\\ExampleRecvEvent_25_01_20")
-#define SENDEVENTID TEXT("Local\\ExampleSendEvent_25_01_20")
-#define CONNECTEVENTID TEXT("Local\\ExampleConnectEvent_25_01_20")
+#define MAPPINGID			TEXT("Local\\ExampleMappingObject_25_01_20")
+#define TIMERID				TEXT("Local\\ExampleTimerObject_25_01_20")
 
-#define MAPPINGID TEXT("Local\\ExampleMappingObject_25_01_20")
-#define TIMERID TEXT("Local\\ExampleTimerObject_25_01_20")
+#define CLASSNAME			TEXT("ClientProgramLayout")
+#define TCLASSNAME			TEXT("DisplayPannelClass")
+#define LCLASSNAME			TEXT("EditPannelClass")
+#define RCLASSNAME			TEXT("ButtonPannelClass")
 
-#define CLASSNAME TEXT("ClientProgramLayout")
-#define TCLASSNAME TEXT("DisplayPannelClass")
-#define LCLASSNAME TEXT("EditPannelClass")
-#define RCLASSNAME TEXT("ButtonPannelClass")
-
-
+/* Declare a Procedure */
 INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -41,25 +45,26 @@ LRESULT CALLBACK EditPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM 
 LRESULT CALLBACK EditSubProc(HWND hWnd,UINT iMessage,WPARAM wParam,LPARAM lParam);
 LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
+/* Declare a SubThread */
 DWORD WINAPI ClientMain(LPVOID lpArg);
 DWORD WINAPI WorkerThread(LPVOID lpArg);
 
-void ShowMessage(TCHAR* buf);
-
+/* Declare a Util */
 void Exit(); 
 void WSAExit();
 DWORD ErrorMessage();
 DWORD WSAErrorMessage();
+void ShowMessage(TCHAR* buf);
 
 int ConvertIP(const TCHAR *IP);
 BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
 
 /* Indirect Dialog */
-#define DLGTITLE	TEXT("InputBox")
-#define DLGFONT		TEXT("MS Sans Serif")
-#define SIZEOF(str)	(sizeof(str)/sizeof((str)[0]))
+#define DLGTITLE			TEXT("InputBox")
+#define DLGFONT				TEXT("MS Sans Serif")
+#define SIZEOF(str)			(sizeof(str)/sizeof((str)[0]))
 
-#pragma pack(push, 4)                 
+#pragma pack(push, 4)          
 static struct tag_CustomDialog{
 	DWORD	Style; 
 	DWORD	dwExtendedStyle; 
@@ -83,12 +88,88 @@ static struct tag_DlgInOut{
 
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
 
+/*	
+	// 전역 변수로 아래와 같이 읽기 전용 문자열을 만들었으나 런타임 시간에 배열 첨자 연산이 추가되고 보안(잘못된 메모리 접근) 위험이 있기 때문에 매크로 상수와 매크로 함수를 이용하기로 한다.
+	// 그리고 여러 래퍼 매크로 함수를 만들 수 있기 때문에 훨씬 편하다.
+	// 다만, 매크로의 경우 컴파일 전처리 과정에 포함된다. 즉, 코드를 생성하지 않고 메모리에서 이미 작성된 소스를 재작성(변환: 패스 과정)하므로 디버깅이 어려우니 주의해야 한다.
+	// 보안 문제는 상당히 저수준을 요하기 때문에 신경 쓸 필요없다.
+
+// Debug Message Index
+#define FAILED_CREATETHREAD				0
+#define FAILED_LOADTHREAD				1
+#define FAILED_CREATETEVENT				2
+#define FAILED_LOADEVENT				3
+#define FAILED_CREATESECTION			4
+#define FAILED_LOADSECTION				5
+#define FAILED_READSECTION				6
+#define FAILED_CREATETIMER				7
+#define FAILED_LOADTIMER				8
+#define FAILED_CREATECOMPLETIONPORT		9
+#define FAILED_LOADCOMPLETIONPORT		10
+#define FAILED_LOADQUEUE				11
+#define FAILED_CREATESOCKET				12
+#define FAILED_CONNECTSOCKET			13
+// #define FAILED_FUNCTION					14
+#define FAILED_ENCODING					15
+#define FAILED_LOSTCONNECTION			16
+
+// Debug Message
+typedef LPCTSTR* FMLPOINTER;
+LPCTSTR FailedMessageList[] = {
+	TEXT("Failed to create thread."),
+	TEXT("Failed to load thread."),
+	TEXT("Failed to create event object."),
+	TEXT("Failed to load event object."),
+	TEXT("Failed to create the shared section."),
+	TEXT("Failed to load the shared section."),
+	TEXT("Failed to read the Share section."),
+	TEXT("Failed to create timer object."),
+	TEXT("Failed to load timer object."),
+	TEXT("Failed to create network communication model."),
+	TEXT("Failed to load network communication model."),
+	TEXT("An error occurred in removing an I/O packet from the system queue and retrieving the data in the packet."),
+	TEXT("Failed to create IP socket."),
+	TEXT("Failed to socket connection."),
+	TEXT("An error occurred while executing the function."),
+	TEXT("Failed to change the encoding of the character."),
+	TEXT("The connection to the server has been lost."),
+};
+FMLPOINTER FML = FailedMessageList;
+*/
+
+// Debug Message Macro
+#define FAILED_CREATETHREAD				Failed to create thread.
+#define FAILED_LOADTHREAD				Failed to load thread.
+#define FAILED_CREATETEVENT				Failed to create event object.
+#define FAILED_LOADEVENT				Failed to load event object.
+#define FAILED_CREATESECTION			Failed to create the shared section.
+#define FAILED_LOADSECTION				Failed to load the shared section.
+#define FAILED_READSECTION				Failed to read the Share section.
+#define FAILED_CREATETIMER				Failed to create timer object.
+#define FAILED_LOADTIMER				Failed to load timer object.
+#define FAILED_CREATECOMPLETIONPORT		Failed to create network communication model.
+#define FAILED_LOADCOMPLETIONPORT		Failed to load network communication model.
+#define FAILED_LOADQUEUE				An error occurred in removing an I/O packet from the system queue and retrieving the data in the packet.
+#define FAILED_CREATESOCKET				Failed to create IP socket.
+#define FAILED_CONNECTSOCKET			Failed to socket connection.
+#define FAILED_FUNCTION					An error occurred while executing the function.
+#define FAILED_ENCODING					Failed to change the encoding of the character.
+#define FAILED_LOSTCONNECTION			The connection to the server has been lost.
+
+// Debug Message Concatenate Macro
+#define MSG(str)						#str
+#define VALUE(macro)					macro
+#define ERROR_MSG_GENERIC(text)			TEXT(MSG(text))
+#define ERROR_MSG_FUNCTION(func, text)	TEXT("["MSG(func)"] :"MSG(VALUE(text)))		
+
+// Wrapper Macro
+#define ERR(a)							ERROR_MSG_GENERIC(a)
+#define ERRFUNC(a,b)					ERROR_MSG_FUNCTION(a,b)
 /* 
 	모듈 내부에서 생성한 핸들은 해당 프로세스가 생성한 스레드간에 공유될 수 있으나 다른 프로세스와는 공유할 수 없다.
 	즉, 서버와 클라이언트가 동일한 객체의 핸들을 소유하고 있어야 할 필요가 없으며 서버는 서버 고유의 입출력 완료 포트 객체를 소유하고
 	클라이언트는 클라이언트 고유의 입출력 완료 포트 객체를 소유하면 된다.
 */
-
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	WSADATA wsa;
 	if(WSAStartup(MAKEWORD(2,2), &wsa) != 0){ Exit(); }
@@ -163,7 +244,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	if(hRecvEvent == NULL){ Exit(); }
 	hSendEvent = CreateEvent(NULL, FALSE, FALSE, SENDEVENTID);
 	if(hSendEvent == NULL){ Exit(); }
-	hConnectEvent = CreateEvent(NULL, FALSE, FALSE, CONNECTEVENTID);
+	hConnectEvent = CreateEvent(NULL, TRUE, FALSE, CONNECTEVENTID);
 	if(hConnectEvent == NULL){ Exit(); }
 
 	MSG msg;
@@ -215,7 +296,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 		0,
 		0,
 		DLGTITLE,
-		8,							// DLU 변환 필요
+		8,
 		DLGFONT,
 	};
 
@@ -253,9 +334,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 								hClientMainThread = CreateThread(NULL, 0, ClientMain, &DlgInOut, 0, &dwThreadID);
 								if(hClientMainThread){ 
 									CloseHandle(hClientMainThread);
-									SetTimer(hWnd, 1, 10000, NULL);
+									SetTimer(hWnd, 1, 60000, NULL);
 								}
-								else{ ErrorMessage(); }
+								else{ ErrorMessage(ERR(FAILED_CREATETHREAD)); }
 							}
 							break;
 					}
@@ -268,7 +349,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				case 1:
 					/* 스레드가 종료된 이후 새로운 ID가 할당될 수 있다. 즉, 유효하지 않을 수 있다.  */
 					hClientMainThread = OpenThread(THREAD_QUERY_INFORMATION | SYNCHRONIZE, FALSE, dwThreadID);
-					if(hClientMainThread == NULL){ ErrorMessage(); break; }
+					if(hClientMainThread == NULL){ ErrorMessage(ERR(FAILED_LOADTHREAD)); break; }
 
 					dwThread = WaitForSingleObject(hClientMainThread, 0);
 					if(dwThread != WAIT_OBJECT_0){ CloseHandle(hClientMainThread); break; }
@@ -290,7 +371,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 								break;
 						}
 					}else{
-						ErrorMessage();
+						return ErrorMessage(ERRFUNC(GetExitCodeThread(), FAILED_FUNCTION));
 					}
 
 					if(hClientMainThread){ CloseHandle(hClientMainThread); }
@@ -361,7 +442,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			// if(FindAtom((LPTSTR)DlgInOut.IPAtom) != 0) { DeleteAtom(DlgInOut.IPAtom); }
 			// if(FindAtom((LPTSTR)DlgInOut.PortAtom) != 0) { DeleteAtom(DlgInOut.PortAtom); }
 			if(hClientMainThread != NULL){
-				/* TODO: 종료전에 종료 데이터 전송 */
+				/* TODO: 종료전에 종료 데이터 전송 - OOB보단 일반 데이터 처리가 편리 */
 				CloseHandle(hClientMainThread);
 			}
 			PostQuitMessage(0);
@@ -371,6 +452,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, iMessage, wParam, lParam);
 }
 
+/* 여분 메모리 이용해도됨 */
 static WNDPROC OldEditProc;
 LRESULT CALLBACK EditPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	static HWND hMsgEdit;
@@ -435,9 +517,20 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 	static HWND hSendBtn, hEditPannel, hMsgEdit;
 	RECT rt;
 
+	char* bufA;
+	wchar_t* bufW;
+	TCHAR* bufT;
+	int LengthW, LengthA;
+
+	static HANDLE hSendEvent, hMap;
+	static SOCKET* sock;
+	static TCHAR* rdPtr;
+	WSABUF wsabuf;
+
 	switch(iMessage){
 		case WM_CREATE:
 			hSendBtn = CreateWindow(TEXT("button"), TEXT("Send"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 0,0,0,0, hWnd, (HMENU)IDC_BTNSEND, GetModuleHandle(NULL), NULL);
+
 			return 0;
 
 		case WM_SIZE:
@@ -454,30 +547,50 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 							hMsgEdit = FindWindowEx(hEditPannel, NULL, TEXT("edit"), NULL);
 						}
 
-						{
-							char mbuf[0x400];
-							wchar_t wbuf[0x800];
-							int Length = -1;
-							HANDLE hRecvEvent, hSendEvent;
+						LengthW = SendMessage(hMsgEdit, WM_GETTEXTLENGTH, 0, 0);
+						bufT = (TCHAR*)malloc(LengthW + 1);
+						SendMessage(hMsgEdit, WM_GETTEXT, LengthW+1, (LPARAM)bufT);
+						LengthA = WideCharToMultiByte(CP_ACP, 0, bufT, -1, NULL, 0, NULL, NULL);
+						if(LengthA == 0){ return ErrorMessage(ERR(FAILED_ENCODING)); }
+						if(WideCharToMultiByte(CP_ACP, 0, bufT, -1, bufA, LengthA, NULL, NULL) == 0){ return ErrorMessage(ERR(FAILED_ENCODING)); }
+						wsabuf.buf = bufA;
+						wsabuf.len = LengthA;
 
-							GetDlgItemTextA(hWnd, IDC_EDMSG, mbuf, sizeof(mbuf));
-							Length = MultiByteToWideChar(CP_ACP, 0, mbuf, -1, NULL, 0);
-							if(Length == 0 && GetLastError() == ERROR_INVALID_FLAGS){
-								// ShowMessage(TEXT("An error occurred during charset conversion."));
-								return ErrorMessage();
-							}
-							MultiByteToWideChar(CP_ACP, 0, mbuf, -1, wbuf, Length);
+						// TODO : 연결상태 확인 - MenuItem
 
-							/*
-								ClientMain 스레드 작성 완료 01.19.일
-								서버 연결까지 완료
-
-								TODO: 공유 데이터 열어서 SendEvent 활성화 및 WSASend 호출
-							*/
+						// TODO : 정보 가져오기
+						if(hMap == NULL){
+							hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
+							if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION)); }
 						}
 
-						/* 프로세스 후 기본 작업 */
-						SetWindowText(hMsgEdit, TEXT(""));
+						if(rdPtr == NULL){
+							rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HANDLE) + sizeof(DWORD));
+							if(rdPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION)); }
+
+							memcpy(&sock, rdPtr, sizeof(SOCKET*));
+						}
+
+						if(hSendEvent == NULL){
+							hSendEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, SENDEVENTID);
+							if(hSendEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
+						}
+
+						if(sock != NULL){
+							if(SetEvent(hSendEvent)){
+								// TODO: 함수 호출
+
+
+								// TODO: 데이터 전송 후 MsgEdit 기본 작업
+								SetWindowText(hMsgEdit, TEXT(""));
+							}else{
+								return ErrorMessage(ERRFUNC(SetEvent(), FAILED_FUNCTION));
+							}
+						}else{
+							return ErrorMessage(ERR(FAILED_CREATESOCKET));
+						}
+
+						// TODO: 공통 기본 작업
 						SetFocus(hMsgEdit);
 					}
 					break;
@@ -485,6 +598,9 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 			return 0;
 
 		case WM_DESTROY:
+			if(hSendEvent){CloseHandle(hSendEvent);}
+			if(rdPtr){UnmapViewOfFile(rdPtr);}
+			if(hMap){CloseHandle(hMap);}
 			return 0;
 	}
 
@@ -519,7 +635,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 
 	DWORD dwAddress, dwPort;
 	BOOL bSucceeded;
-	TCHAR ResultW[0x100];
+	wchar_t ResultW[0x100];
 	char ResultA[0x50];
 
 	static struct tag_DlgInOut* DlgInOut;
@@ -550,7 +666,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 
 			SetWindowPos(hWnd, NULL, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, SWP_NOZORDER);
 
-			/* 컨트롤 추가, TODO: IP 입력용 공통 컨트롤로 변경, Static 컨트롤 추가(01.23 완) */
+			/* 컨트롤 생성 */
 			SetRect(&srt, 6, 6, 6 + 120, 6 + 18);
 			MapDialogRect(hWnd, &srt);
 			hDlgControl[IPSTATIC] = CreateWindow(TEXT("static"), TEXT("IP"), WS_VISIBLE | WS_CHILD | SS_LEFT, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
@@ -623,9 +739,9 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 						return TRUE;
 					}
 
-					wsprintf(ResultW, TEXT("%d.%d.%d.%d"), FIRST_IPADDRESS(dwAddress), SECOND_IPADDRESS(dwAddress), THIRD_IPADDRESS(dwAddress), FOURTH_IPADDRESS(dwAddress));
+					StringCbPrintf(ResultW, sizeof(ResultW), TEXT("%d.%d.%d.%d"), FIRST_IPADDRESS(dwAddress), SECOND_IPADDRESS(dwAddress), THIRD_IPADDRESS(dwAddress), FOURTH_IPADDRESS(dwAddress));
 					if(WideCharToMultiByte(CP_ACP, 0, ResultW, -1, ResultA, 0x50, NULL, NULL) == 0){
-						ErrorMessage();
+						ErrorMessage(ERR(FAILED_ENCODING));
 						return TRUE;
 					}
 
@@ -633,14 +749,14 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 					DlgInOut->IPAtom = AddAtomA(ResultA);									// 0xFFFF까지 유효범위 대소문자 구분
 					// DlgInOut->IPAtom = AddAtom(ResultW);
 					if(DlgInOut->IPAtom == 0){
-						ErrorMessage();
+						ErrorMessage(ERRFUNC(AddAtom(), FAILED_FUNCTION));
 						return TRUE;
 					}
 
 					DlgInOut->PortAtom = AddAtomA((LPCSTR)(WORD)(DWORD)(dwPort));			// 0xBFFF까지 유효범위 #dddd형태
 					// DlgInOut->PortAtom = AddAtom((LPTSTR)(WORD)(DWORD)dwPort);
 					if(DlgInOut->PortAtom == 0){
-						ErrorMessage();
+						ErrorMessage(ERRFUNC(AddAtom(), FAILED_FUNCTION));
 						return TRUE;
 					}
 
@@ -658,7 +774,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 struct tag_Info{
 	SOCKET sock;
 	HANDLE hMap, hCP;
-	DWORD TlsIndex;
+	DWORD TlsIndex;			// 추가 및 할당은 완료, 필요시 사용
 };
 
 DWORD WINAPI ClientMain(LPVOID lpArg){
@@ -670,17 +786,24 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	struct tag_DlgInOut* DlgInOut = (struct tag_DlgInOut*)lpArg;
 
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
-	if(hMap == NULL){ return ErrorMessage();}
+	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION));}
 
 	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HANDLE) + sizeof(DWORD));
-	if(rdPtr == NULL){ return ErrorMessage();}
+	if(rdPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION));}
 
 	memcpy(&sock, rdPtr, sizeof(SOCKET*));
-	memcpy(&hCP, rdPtr + sizeof(SOCKET*), sizeof(HANDLE));
-	memcpy(&TlsIndex, rdPtr + sizeof(SOCKET*) + sizeof(HANDLE), sizeof(DWORD));
+	memcpy(&hCP, rdPtr + sizeof(SOCKET*) + 1, sizeof(HANDLE));
+	memcpy(&TlsIndex, rdPtr + sizeof(SOCKET*) + sizeof(HANDLE) + 1, sizeof(DWORD));
+
+	/* 
+		핸들은 카운팅 횟수를 관리하기 때문에 메인 컨텍스트에서 핸들을 닫지 않는 한 인스턴스화 된 객체는 유지된다.
+		핸들을 복사하는 이유는 카운팅 횟수를 유지하기 위해서이며 
+	*/
+	// UnmapViewOfFile(rdPtr);
+	// CloseHandle(hMap);
 
 	*sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if(*sock == INVALID_SOCKET){ return WSAErrorMessage(); }
+	if(*sock == INVALID_SOCKET){ return WSAErrorMessage(ERR(FAILED_CREATESOCKET)); }
 
 	struct sockaddr_in Server;
 	// TCHAR IPAddressW[INET_ADDRSTRLEN * 2];
@@ -693,8 +816,8 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	// if(WideCharToMultiByte(CP_UTF8, 0, IPAddressW, -1, IPAddressA, INET_ADDRSTRLEN, NULL, NULL) == 0){ return ErrorMessage(); }
 	// short unsigned int uhdPort = _wtoi(szPortW + 1);
 
-	if(GetAtomNameA(DlgInOut->IPAtom, IPAddressA, INET_ADDRSTRLEN) == 0){ return ErrorMessage(); }
-	if(GetAtomNameA(DlgInOut->PortAtom, szPortA, 0x10) == 0){ return ErrorMessage(); }
+	if(GetAtomNameA(DlgInOut->IPAtom, IPAddressA, INET_ADDRSTRLEN) == 0){ return ErrorMessage(ERRFUNC(GetAtomName(), FAILED_FUNCTION)); }
+	if(GetAtomNameA(DlgInOut->PortAtom, szPortA, 0x10) == 0){ return ErrorMessage(ERRFUNC(GetAtomName(), FAILED_FUNCTION)); }
 	short unsigned int uhdPort = atoi(szPortA + 1);
 
 	Server.sin_family = AF_INET;
@@ -702,22 +825,26 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	Server.sin_port = htons(uhdPort /* SERVERPORT */);
 
 	int ret = connect(*sock, (struct sockaddr*)&Server, sizeof(Server));
-	if(ret == SOCKET_ERROR){ return WSAErrorMessage();}
+	if(ret == SOCKET_ERROR){ return WSAErrorMessage(ERR(FAILED_CONNECTSOCKET));}
 
-	if(CreateIoCompletionPort((HANDLE)(*sock), hCP, 0, 0) != hCP){ return ErrorMessage(); }
+	if(CreateIoCompletionPort((HANDLE)(*sock), hCP, 0, 0) == NULL){ return ErrorMessage(ERR(FAILED_LOADCOMPLETIONPORT)); }
 
 	hConnectEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, CONNECTEVENTID);
-	if(hConnectEvent == NULL){ return ErrorMessage(); }
+	if(hConnectEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
 
-	if(SetEvent(hConnectEvent) == FALSE){ return ErrorMessage(); }
+	if(SetEvent(hConnectEvent)){
+		CloseHandle(hConnectEvent);
+	}else{
+		return ErrorMessage(ERRFUNC(SetEvent(), FAILED_FUNCTION));
+	}
 
 	DWORD dwThreadID;
 	struct tag_Info Info = {*sock, hMap, hCP, 0};
 	HANDLE hWorkerThread = CreateThread(NULL, 0, WorkerThread, &Info, 0, &dwThreadID);
-	if(hWorkerThread == NULL){ return ErrorMessage(); }
+	if(hWorkerThread == NULL){ return ErrorMessage(ERR(FAILED_CREATETHREAD)); }
 
-	HANDLE hTimer = OpenWaitableTimer(TIMER_MODIFY_STATE, FALSE, TIMERID);
-	if(hTimer == NULL){ return ErrorMessage(); }
+	HANDLE hTimer = OpenWaitableTimer(TIMER_MODIFY_STATE | TIMER_QUERY_STATE | SYNCHRONIZE, FALSE, TIMERID);
+	if(hTimer == NULL){ return ErrorMessage(ERR(FAILED_LOADTIMER)); }
 
 	#define PERIOD 60000
 	LARGE_INTEGER DueTime = {0,};
@@ -726,14 +853,13 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	DWORD dwThread, dwTimer, dwExitCode;
 
 	while(1){
-		/* 5초마다 실행 */
+		/* 60초마다 실행 */
 		dwTimer = WaitForSingleObject(hTimer, INFINITE);
 		dwThread = WaitForSingleObject(hWorkerThread, 0);
 
-		if(dwTimer == WAIT_FAILED || dwThread == WAIT_FAILED){ continue; }
-
 		if(dwThread != WAIT_OBJECT_0){ continue; }
-		if(GetExitCodeThread(hWorkerThread, &dwExitCode) == FALSE){ continue; }
+		if(dwTimer == WAIT_FAILED || dwThread == WAIT_FAILED){ ErrorMessage(ERRFUNC(WaitForSingleObject(), FAILED_FUNCTION)); continue;}
+		if(GetExitCodeThread(hWorkerThread, &dwExitCode) == FALSE){ ErrorMessage(ERRFUNC(GetExitCodeThread(), FAILED_FUNCTION)); continue; }
 
 		/* 에러 점검 */
 		switch(dwExitCode){
@@ -752,48 +878,69 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 }
 
 DWORD WINAPI WorkerThread(LPVOID lpArg){
+	/* 여기서 핸들 전달하면 유효하지 않은 값으로 나오는 것으로 보임 */
 	struct tag_Info* Info = (struct tag_Info*)lpArg;
 
 	OVERLAPPED ov;
-	HANDLE hSendEvent;
+	HANDLE hSendEvent, hConnectEvent;
 	DWORD dwTransferred, dwEvent, dwError;
 
-	hSendEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, SENDEVENTID);
-	if(hSendEvent == NULL){ return ErrorMessage(); }
+	hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
+	if(hSendEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
+
+	hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
+	if(hConnectEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
 
 	while(1){
-		if(GetQueuedCompletionStatus( Info->hCP, &dwTransferred, NULL, (LPOVERLAPPED*)&ov, INFINITE)){
-			dwEvent = WaitForSingleObject(hSendEvent, 0);
+		dwEvent = WaitForSingleObject(hConnectEvent, 0);
+		if(dwEvent == WAIT_OBJECT_0){
+			if(GetQueuedCompletionStatus(Info->hCP, &dwTransferred, NULL, (LPOVERLAPPED*)&ov, INFINITE)){
+				dwEvent = WaitForSingleObject(hSendEvent, 0);
+
+				switch(dwEvent){
+					case WAIT_TIMEOUT:
+						//TODO : 통신 작업
+						/* Recv Event */
+						break;
+
+					case WAIT_OBJECT_0:
+						/* Send Event */
+						break;
+
+					case WAIT_FAILED:
+						/* 구분 불가능한 상태이므로 에러 코드 출력 후 루프 재실행*/
+						ErrorMessage(ERRFUNC(GetCompletionStatus(), FAILED_FUNCTION));
+						break;
+				}
+			}else{
+				/* 호출 처리중 CompletionPort 핸들 닫히면 실패하고 FALSE 반환 */
+				dwError = GetLastError();
+
+				switch(dwError){
+					/* 작업 실패 및 저장한 정보가 없는 상태 */
+					case ERROR_ABANDONED_WAIT_0:
+						if((LPOVERLAPPED*)&ov == NULL){Exit();}
+						break;
+
+					case ERROR_SUCCESS:
+						break;
+
+					/* 작업 실패 후 실패한 작업에 대한 정보를 저장한 상태 */
+					default:
+						// TODO: dwTransferred, lpCompletionKey(3), ov 정보 저장 후 스레드 재실행 시 우선 처리
+						return ErrorMessage(ERRFUNC(GetQueuedCompltionStatus(), FAILED_LOADQUEUE));
+				}
+			}
+		}else{
+			if(hSendEvent){CloseHandle(hSendEvent);}
+			if(hConnectEvent){CloseHandle(hConnectEvent);}
 
 			switch(dwEvent){
 				case WAIT_TIMEOUT:
-					//TODO : 통신 작업
-					/* Recv Event */
-					break;
-
-				case WAIT_OBJECT_0:
-					/* Send Event */
-					break;
+					return ErrorMessage(ERR(FAILED_LOSTCONNECTION));
 
 				case WAIT_FAILED:
-					/* 구분 불가능한 상태이므로 에러 코드 출력 후 루프 재실행*/
-					ErrorMessage();
-					break;
-			}
-		}else{
-			/* 호출 처리중 CompletionPort 핸들 닫히면 실패하고 FALSE 반환 */
-			dwError = GetLastError();
-
-			switch(dwError){
-				/* 작업 실패 및 저장한 정보가 없는 상태 */
-				case ERROR_ABANDONED_WAIT_0:
-					if((LPOVERLAPPED*)&ov == NULL){Exit();}
-					break;
-
-				/* 작업 실패 후 실패한 작업에 대한 정보를 저장한 상태 */
-				default:
-					// TODO: dwTransferred, lpCompletionKey(3), ov 정보 저장 후 스레드 재실행 시 우선 처리
-					break;
+					return ErrorMessage(ERRFUNC(WaitForSingleObject(), FAILED_FUNCTION));
 			}
 		}
 	}
@@ -809,32 +956,6 @@ LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID
 	else{ hInst = (HINSTANCE)GetWindowLongPtr(hOwner, GWLP_HINSTANCE); }
 
 	return DialogBoxIndirectParamW(hInst, (LPCDLGTEMPLATEW)&Template, hOwner, (DLGPROC)DialogProc, (LPARAM)lpArg);
-}
-
-int ConvertIP(const TCHAR *IP){
-	if(IP == NULL){return -1;}
-
-	int Per = 3;
-	int Bit = 8;
-	int Radix = 16;
-	int Value = 0;
-	int Result = 0;
-	const TCHAR *ptr = IP;
-
-	for(ptr; *ptr; ptr++){
-		if(*ptr >= '0' && *ptr <= '9'){
-			Value *= 10;
-			Value += *ptr - '0';
-		}else if(*ptr == '.'){
-			Result |= Value << Bit * Per;
-			Per--;
-			Value = 0;
-		}
-	}
-
-	Result |= Value;
-
-	return Result;
 }
 
 BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio){
@@ -856,7 +977,7 @@ void ShowMessage(TCHAR* buf){
 }
 
 /* Fatal */
-void Exit() { 
+void Exit(TCHAR* msg) { 
 	LPVOID lpMsgBuf;
 	DWORD dw = GetLastError(); 
 
@@ -865,13 +986,15 @@ void Exit() {
 		ExitProcess(dw);
 	}
 
-	MessageBox(HWND_DESKTOP, (LPCTSTR)lpMsgBuf, TEXT("Error"), MB_ICONERROR | MB_OK);
+	TCHAR buf[0x1000];
+	StringCbPrintf(buf, sizeof(buf), TEXT("%s(%d)\r\n%s"), lpMsgBuf, dw, msg);
+	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONERROR | MB_OK);
 
 	LocalFree(lpMsgBuf);
 	ExitProcess(dw); 
 }
 
-void WSAExit() { 
+void WSAExit(TCHAR* msg) { 
 	LPVOID lpMsgBuf;
 	int err = WSAGetLastError(); 
 
@@ -880,14 +1003,16 @@ void WSAExit() {
 		ExitProcess(err);
 	}
 
-	MessageBox(HWND_DESKTOP, (LPCTSTR)lpMsgBuf, TEXT("Error"), MB_ICONERROR | MB_OK);
+	TCHAR buf[0x1000];
+	StringCbPrintf(buf, sizeof(buf), TEXT("%s(%d)\r\n%s"), lpMsgBuf, err, msg);
+	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONERROR | MB_OK);
 
 	LocalFree(lpMsgBuf);
 	ExitProcess(err); 
 }
 
 /* Nonfatal */
-DWORD ErrorMessage(){
+DWORD ErrorMessage(TCHAR* msg){
 	LPVOID lpMsgBuf;
 	DWORD dw = GetLastError(); 
 
@@ -896,13 +1021,15 @@ DWORD ErrorMessage(){
 		return 0x10000000; /* Custom Error(29bit) : MessageFunction Failed */
 	}
 
-	MessageBox(HWND_DESKTOP, (LPCTSTR)lpMsgBuf, TEXT("Error"), MB_ICONWARNING | MB_OK);
+	TCHAR buf[0x1000];
+	StringCbPrintf(buf, sizeof(buf), TEXT("%s(%d)\r\n%s"), lpMsgBuf, dw, msg);
+	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONWARNING | MB_OK);
 	LocalFree(lpMsgBuf);
 
 	return dw;
 }
 
-DWORD WSAErrorMessage(){
+DWORD WSAErrorMessage(TCHAR* msg){
 	LPVOID lpMsgBuf;
 	int err = WSAGetLastError(); 
 
@@ -911,6 +1038,8 @@ DWORD WSAErrorMessage(){
 		return 0x10000000; /* Custom Error(29bit) : MessageFunction Failed */
 	}
 
+	TCHAR buf[0x1000];
+	StringCbPrintf(buf, sizeof(buf), TEXT("%s(%d)\r\n%s"), lpMsgBuf, err, msg);
 	MessageBox(HWND_DESKTOP, (LPCTSTR)lpMsgBuf, TEXT("Error"), MB_ICONWARNING | MB_OK);
 	LocalFree(lpMsgBuf);
 
