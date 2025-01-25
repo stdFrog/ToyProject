@@ -159,21 +159,20 @@ FMLPOINTER FML = FailedMessageList;
 #define FAILED_LOADDLL					Failed to load Dynamic Linked Library
 #define FAILED_ALLOCATEMEMORY			Failed to allocate memory
 #define INVALID_HANDLE_TERMINATED		The resources in the network communication model are invalid.
-#define INVALID_HANDLE_ABANDONED		The operation was abandoned because the network communication model was invalid. No failed actions will be taken, so the process will be terminated normally.
+#define INVALID_HANDLE_ABANDONED_0		The operation was abandoned because the network communication model was invalid. No failed actions will be taken so the process will be terminated normally.
+#define INVALID_HANDLE_ABANDONED_1		The operation was abandoned because the network communication model was invalid. Data transfer failed due to an invalid handle but relevant information was saved.
 #define ACCESS_VIOLATION				Access violation occurred due to access to incorrect memory space.
 
-
 // Debug Message Concatenate Macro
-// TODO: VALUE 문자로 출력되니 매크로 수정할 것 
 #define MSG(str)						#str
-#define MSG2(str)						MSG(str)
 #define VALUE(macro)					macro
-#define ERROR_MSG_GENERIC(text)			TEXT(MSG(text))
-#define ERROR_MSG_FUNCTION(func, text)	TEXT("["MSG(func)"] :"MSG(VALUE(text)))		
+#define ERROR_MSG_GENERICA(text)		MSG(text)
+#define ERROR_MSG_GENERICW(text)		TEXT(MSG(text))
+#define ERROR_MSG_FUNCTION(func, text)	TEXT("["MSG(func)"] :"ERROR_MSG_GENERICA(text))
 
 // Wrapper Macro
-#define ERR(a)							ERROR_MSG_GENERIC(a)
-#define ERRFUNC(a,b)					ERROR_MSG_FUNCTION(a,b)
+#define ERR(a)							ERROR_MSG_GENERICW(VALUE(a))
+#define ERRFUNC(a,b)					ERROR_MSG_FUNCTION(a,VALUE(b))
 
 /* 
 	모듈 내부에서 생성한 핸들은 해당 프로세스가 생성한 스레드간에 공유될 수 있으나 다른 프로세스와는 공유할 수 없다.
@@ -464,9 +463,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	return DefWindowProc(hWnd, iMessage, wParam, lParam);
 }
 
-/* 
-	TODO: 역공학이나 크랙(이진 덤프) 가능성 있으므로 리팩토링할 때 필히 수정할 것
-*/
 static WNDPROC OldEditProc;
 LRESULT CALLBACK EditPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	static HWND hMsgEdit;
@@ -860,11 +856,11 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 
 	// 핸들은 카운팅 횟수를 관리하기 때문에 메인 컨텍스트에서 핸들을 닫지 않는 한 인스턴스화 된 객체는 유지된다.
 	hMap = OpenFileMapping(FILE_MAP_WRITE, FALSE, MAPPINGID);
-	if(hMap == NULL){ }//return ErrorMessage(ERR(FAILED_LOADSECTION));}
+	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION));}
 
 	TCHAR* wrPtr;
 	wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(SOCKET*) + sizeof(hCP));
-	if(wrPtr == NULL){ } //return ErrorMessage(ERR(FAILED_READSECTION));}
+	if(wrPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION));}
 
 	memcpy(wrPtr, &sock, sizeof(SOCKET*));
 	memcpy(wrPtr + sizeof(SOCKET*), &hCP, sizeof(HANDLE));
@@ -973,6 +969,8 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	CloseHandle(hMap);
 
 	hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
+	CloseHandle(hSendEvent);
+	hSendEvent = NULL;
 	if(hSendEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
 
 	hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
