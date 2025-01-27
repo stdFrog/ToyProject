@@ -85,6 +85,7 @@ static struct tag_CustomDialog{
 static struct tag_DlgInOut{
 	ATOM IPAtom;
 	ATOM PortAtom;
+	BOOL bConnect;
 };
 
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
@@ -152,6 +153,7 @@ FMLPOINTER FML = FailedMessageList;
 #define FAILED_LOADCOMPLETIONPORT		Failed to load network communication model.
 #define FAILED_LOADQUEUE				An error occurred in removing an I/O packet from the system queue and retrieving the data in the packet.
 #define FAILED_CREATESOCKET				Failed to create IP socket.
+#define FAILED_LOADSOCKET				Failed to load IP Socket.
 #define FAILED_CONNECTSOCKET			Failed to socket connection.
 #define FAILED_FUNCTION					An error occurred while executing the function.
 #define FAILED_ENCODING					Failed to change the encoding of the character.
@@ -295,7 +297,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	HMENU hMenu, hPopup;
 	
 	static DWORD dwThreadID;
-	static HANDLE hClientMainThread, hConnectEvent;
+	static HANDLE hClientMainThread;
+	HANDLE hConnectEvent;
 	DWORD dwThread, dwConnect, dwExitCode;
 
 	static struct tag_CustomDialog MyDlg = {
@@ -311,6 +314,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 	};
 
 	static struct tag_DlgInOut DlgInOut;
+	static BOOL bConnect;
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -332,6 +336,9 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 
 		case WM_INITMENU:
 			/* TODO: 연결 상태를 체크 모양으로 표시 */ 
+			if(DlgInOut.bConnect){
+				CheckMenuRadioItem(GetSubMenu((HMENU)wParam, 0), 0, 0, 0, MF_BYPOSITION);
+			}
 			break;
 
 		case WM_COMMAND:
@@ -347,8 +354,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 								else{ ErrorMessage(ERR(FAILED_CREATETHREAD)); }
 							}
 							break;
-					}
-					break;
+						}
+						break;
 			}
 			return 0;
 
@@ -357,7 +364,11 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 				case 1:
 					/* 스레드가 종료된 이후 새로운 ID가 할당될 수 있다. 즉, 유효하지 않을 수 있다. 따라서, 핸들을 유지하는 것이 좋다. */
 					// hClientMainThread = OpenThread(THREAD_QUERY_INFORMATION | SYNCHRONIZE, FALSE, dwThreadID);
-					if(hClientMainThread == NULL){ ErrorMessage(ERR(FAILED_CREATETHREAD)); break; }
+					if(hClientMainThread == NULL){ 
+						DlgInOut.bConnect = FALSE;
+						ErrorMessage(ERR(FAILED_LOADTHREAD));
+						break;
+					}
 
 					dwThread = WaitForSingleObject(hClientMainThread, 0);
 					if(dwThread != WAIT_OBJECT_0){ break; }
@@ -367,24 +378,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 						switch(dwExitCode){
 							default:
 								// 연결 상태일 경우 스레드 재생성
-								if(hConnectEvent == NULL){
-									hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
-									if(hConnectEvent == NULL){ Exit(TEXT("The data required for communication has not been initialized. Please re-run the program.")); }
-								}
+								hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
+								if(hConnectEvent == NULL){ Exit(TEXT("The data required for communication has not been initialized. Please re-run the program.")); }
 
 								dwConnect = WaitForSingleObject(hConnectEvent, 0);
 								if(dwConnect == WAIT_OBJECT_0){
 									ShowMessage(TEXT("An error occurred during communication with the server and the operation was terminated.\r\nSince this is an error that can be fixed, click the OK button and it will run again."));
 									if(hClientMainThread){ CloseHandle(hClientMainThread); }
+									DlgInOut.bConnect = FALSE;
 									hClientMainThread = CreateThread(NULL, 0, ClientMain, &DlgInOut, 0, &dwThreadID);
 								}
+								CloseHandle(hConnectEvent);
 								break;
 						}
 					}else{
-						return ErrorMessage(ERRFUNC(GetExitCodeThread(), FAILED_FUNCTION));
+						ErrorMessage(ERRFUNC(GetExitCodeThread(), FAILED_FUNCTION));
 					}
-
-					if(hClientMainThread){ CloseHandle(hClientMainThread); }
 					break;
 			}
 			return 0;
@@ -532,10 +541,12 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 	TCHAR* bufT;
 	int LengthW, LengthA;
 
-	static HANDLE hSendEvent, hMap;
-	static SOCKET* sock;
-	static TCHAR* rdPtr;
+	HANDLE hSendEvent, hMap;
+	SOCKET* sock;
+	TCHAR* rdPtr;
 	WSABUF wsabuf;
+	DWORD dwError, dwSend, dwFlags;
+	OVERLAPPED ov;
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -556,51 +567,103 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 							hMsgEdit = FindWindowEx(hEditPannel, NULL, TEXT("edit"), NULL);
 						}
 
-						LengthW = SendMessage(hMsgEdit, WM_GETTEXTLENGTH, 0, 0);
-						bufT = (TCHAR*)malloc(LengthW + 1);
-						SendMessage(hMsgEdit, WM_GETTEXT, LengthW+1, (LPARAM)bufT);
-						LengthA = WideCharToMultiByte(CP_ACP, 0, bufT, -1, NULL, 0, NULL, NULL);
-						if(LengthA == 0){ return ErrorMessage(ERR(FAILED_ENCODING)); }
-						if(WideCharToMultiByte(CP_ACP, 0, bufT, -1, bufA, LengthA, NULL, NULL) == 0){ return ErrorMessage(ERR(FAILED_ENCODING)); }
-						wsabuf.buf = bufA;
-						wsabuf.len = LengthA;
-
 						// TODO : 연결상태 확인 - MenuItem
 
 						// TODO : 정보 가져오기
-						if(hMap == NULL){
-							hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
-							if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION)); }
+						hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
+						if(hMap == NULL){ 
+							dwError = ErrorMessage(ERR(FAILED_LOADSECTION));
+							CloseHandle(hMap);
+							return dwError;
 						}
 
+						rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*));
 						if(rdPtr == NULL){
-							rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*));
-							if(rdPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION)); }
-
-							memcpy(&sock, rdPtr, sizeof(SOCKET*));
+							dwError = ErrorMessage(ERR(FAILED_READSECTION));
+							CloseHandle(hMap);
+							return dwError;
 						}
 
+						memcpy(&sock, rdPtr, sizeof(SOCKET*));
+
+						hSendEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, SENDEVENTID);
 						if(hSendEvent == NULL){
-							hSendEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, SENDEVENTID);
-							if(hSendEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
+							dwError = ErrorMessage(ERR(FAILED_LOADEVENT));
+							UnmapViewOfFile(rdPtr);
+							CloseHandle(hMap);
+							return dwError;
 						}
 
 						if(sock != NULL){
 							if(SetEvent(hSendEvent)){
 								// TODO: 함수 호출
+								LengthW = SendMessage(hMsgEdit, WM_GETTEXTLENGTH, 0, 0);
+								bufT = (TCHAR*)malloc(LengthW + 1);
 
+								SendMessage(hMsgEdit, WM_GETTEXT, LengthW+1, (LPARAM)bufT);
+								bufT[LengthW+1] = 0;
 
+								LengthA = WideCharToMultiByte(CP_ACP, 0, bufT, -1, NULL, 0, NULL, NULL);
+								if(LengthA == 0){
+									dwError = ErrorMessage(ERR(FAILED_ENCODING));
+									if(bufT){free(bufT);}
+									UnmapViewOfFile(rdPtr);
+									CloseHandle(hMap);
+									CloseHandle(hSendEvent);
+									return dwError;
+								}
+
+								bufA = (char*)malloc(LengthA);
+								if(WideCharToMultiByte(CP_ACP, 0, bufT, -1, bufA, LengthA, NULL, NULL) == 0){ 
+									dwError = ErrorMessage(ERR(FAILED_ENCODING));
+									if(bufA){free(bufA);}
+									if(bufT){free(bufT);}
+									UnmapViewOfFile(rdPtr);
+									CloseHandle(hMap);
+									CloseHandle(hSendEvent);
+									return dwError;
+								}
+
+								wsabuf.buf = bufA;
+								wsabuf.len = LengthA;
+
+								dwFlags = 0;
+								memset(&ov, 0, sizeof(ov));
+								if(WSASend(*sock, &wsabuf, 1, &dwSend, dwFlags, &ov, NULL) == SOCKET_ERROR){
+									if(WSAGetLastError() != WSA_IO_PENDING){
+										dwError = WSAErrorMessage(ERRFUNC(WSASend(), FAILED_FUNCTION));
+										if(bufA){free(bufA);}
+										if(bufT){free(bufT);}
+										UnmapViewOfFile(rdPtr);
+										CloseHandle(hMap);
+										CloseHandle(hSendEvent);
+										return dwError;
+									}
+								}
 								// TODO: 데이터 전송 후 MsgEdit 기본 작업
 								SetWindowText(hMsgEdit, TEXT(""));
 							}else{
-								return ErrorMessage(ERRFUNC(SetEvent(), FAILED_FUNCTION));
+								dwError = ErrorMessage(ERRFUNC(SetEvent(), FAILED_FUNCTION));
+								UnmapViewOfFile(rdPtr);
+								CloseHandle(hMap);
+								CloseHandle(hSendEvent);
+								return dwError;
 							}
 						}else{
-							return ErrorMessage(ERR(FAILED_CREATESOCKET));
+							dwError = ErrorMessage(ERR(FAILED_LOADSCOKET));
+							UnmapViewOfFile(rdPtr);
+							CloseHandle(hMap);
+							CloseHandle(hSendEvent);
+							return dwError;
 						}
 
 						// TODO: 공통 기본 작업
 						SetFocus(hMsgEdit);
+						if(bufA){free(bufA); bufA = NULL;}
+						if(bufT){free(bufT); bufT = NULL;}
+						CloseHandle(hSendEvent);
+						UnmapViewOfFile(rdPtr);
+						CloseHandle(hMap);
 					}
 					break;
 			}
@@ -831,6 +894,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 		closesocket(*sock);
 		return dwLastError;
 	}
+	DlgInOut->bConnect = TRUE;
 
 	hCP = CreateIoCompletionPort((HANDLE)(*sock), hCP, 0, 0);
 	if(hCP == NULL){ 
@@ -869,7 +933,6 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	CloseHandle(hMap);
 
 	DWORD dwThreadID;
-	// TODO: 여기서 정보 전달시 에러 발생 (GetQueuedCompletionStatus : 998 잘못된 메모리에 액세스)
 	HANDLE hWorkerThread = CreateThread(NULL, 0, WorkerThread, NULL, 0, &dwThreadID);
 	if(hWorkerThread == NULL){ 
 		dwLastError = WSAErrorMessage(ERR(FAILED_CONNECTSOCKET));
@@ -946,7 +1009,6 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 
 DWORD WINAPI WorkerThread(LPVOID lpArg){
 	/* TODO: 여기서 전달된 핸들이 유효하지 않은 것으로 예상되니 공유 섹션 열어서 직접 가져올 것 */
-	OVERLAPPED ov;
 	HANDLE hCP, hMap, hSendEvent, hConnectEvent;
 	DWORD dwTransferred, dwEvent, dwError;
 	SOCKET* sock;
@@ -969,8 +1031,6 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	CloseHandle(hMap);
 
 	hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
-	CloseHandle(hSendEvent);
-	hSendEvent = NULL;
 	if(hSendEvent == NULL){ return ErrorMessage(ERR(FAILED_LOADEVENT)); }
 
 	hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
@@ -980,23 +1040,36 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 		return dwError;
 	}
 
+	OVERLAPPED ov;
+	WSABUF wsabuf;
+	DWORD dwRecv, dwFlags;
+	char buf[256];
 	while(1){
 		dwEvent = WaitForSingleObject(hConnectEvent, 0);
 		if(dwEvent == WAIT_OBJECT_0){
+			wsabuf.buf = buf;
+			wsabuf.len = 256;
+			memset(&ov, 0, sizeof(ov));
+			WSARecv(*sock, &wsabuf, 1, &dwRecv, &dwFlags, &ov, NULL);
+
 			// 감시할 소켓을 등록할 때는 정보를 전달하지 않아도 괜찮으나 
 			// 세 번째 인수인 CompletionKey를 전달받지 않으면 커널 시스템에서 오류를 발생시킨다.
 			ULONG_PTR CompletionKey;
 			if(GetQueuedCompletionStatus(hCP, &dwTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ov, INFINITE)){
+				// TODO: 데이터 recv인지 send인지 구분할 방법 찾고 프로세싱
 				dwEvent = WaitForSingleObject(hSendEvent, 0);
 
 				switch(dwEvent){
 					case WAIT_TIMEOUT:
-						//TODO : 통신 작업
-						// Recv Event
+						// Recv Job
 						break;
 
 					case WAIT_OBJECT_0:
-						// Send Event
+						if(ResetEvent(hSendEvent)){
+							// Send Job
+						}else{
+							ErrorMessage(ERRFUNC(ResetEvent(), FAILED_FUNCTION));
+						}
 						break;
 
 					case WAIT_FAILED:

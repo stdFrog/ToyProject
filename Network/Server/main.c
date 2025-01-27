@@ -528,13 +528,14 @@ DWORD WINAPI Processing(LPVOID lpArg){
 	SocketInfo *ClientSession;
 	SocketNode* CurrentNode;
 
+	ULONG_PTR CompletionKey;
 	HANDLE hcp = (HANDLE)lpArg;
 
 	while(bRunning){
 		/* 
 		   감시 대상에 대한 이벤트가 발생하면 스레드를 깨운다.
 		 */
-		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, NULL, (LPOVERLAPPED*)&ClientSession, INFINITE);
+		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE);
 		/* 최소한의 방어 */
 		if(ClientSession == NULL){ continue; }
 
