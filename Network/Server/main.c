@@ -31,7 +31,7 @@
 	서버는 얼추 만들었으니 클라이언트 프로그램을 만들어보자.
 	25.01.08.Thu
 */
-#define BUFSIZE 0x1000
+#define BUFSIZE 0x400
 
 /* Callback Procedure */
 LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
@@ -525,7 +525,7 @@ DWORD WINAPI Processing(LPVOID lpArg){
 
 	int ret;
 	DWORD cbTransferred;
-	SocketInfo *ClientSession;
+	SocketInfo* ClientSession;
 	SocketNode* CurrentNode;
 
 	ULONG_PTR CompletionKey;
@@ -535,134 +535,145 @@ DWORD WINAPI Processing(LPVOID lpArg){
 		/* 
 		   감시 대상에 대한 이벤트가 발생하면 스레드를 깨운다.
 		 */
-		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE);
-		/* 최소한의 방어 */
-		if(ClientSession == NULL){ continue; }
+		if(GetQueuedCompletionStatus(hcp, &cbTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE)){
+			if(ClientSession->Connected == FALSE){
+				/*
+					가능성은 희박하나 다중 클라이언트를 이용한 동시 접속이 이뤄질 수 있다.
+					때문에 임계구역에 변수를 밀어넣고 값을 수정하는 것이 좋으나(원자성)
+					값을 수정하는 구간이 해당 분기 외에는 존재하지 않고 소켓 정보를 저장하는
+					자료구조가 연결 리스트 형태이므로 위 경우는 고려하지 않기로 한다.
+				*/
+				ClientSession->Connected = TRUE;
+				CurrentNode = CreateSocketNode(ClientSession);
 
-		if(ClientSession->Connected == FALSE){
-			/*
-				가능성은 희박하나 다중 클라이언트를 이용한 동시 접속이 이뤄질 수 있다.
-				때문에 임계구역에 변수를 밀어넣고 값을 수정하는 것이 좋으나(원자성)
-				값을 수정하는 구간이 해당 분기 외에는 존재하지 않고 소켓 정보를 저장하는
-				자료구조가 연결 리스트 형태이므로 위 경우는 고려하지 않기로 한다.
-			*/
-			ClientSession->Connected = TRUE;
-			CurrentNode = CreateSocketNode(ClientSession);
+				EnterCriticalSection(&cs);
+				AppendSocketNode(&L, CurrentNode);
+				LeaveCriticalSection(&cs);
+			}else{
+				EnterCriticalSection(&cs);
+				CurrentNode = GetNodeAtSocketInfo(L, ClientSession);
+				LeaveCriticalSection(&cs);
+			}
 
-			EnterCriticalSection(&cs);
-			AppendSocketNode(&L, CurrentNode);
-			LeaveCriticalSection(&cs);
-		}else{
-			EnterCriticalSection(&cs);
-			CurrentNode = GetNodeAtSocketInfo(L, ClientSession);
-			LeaveCriticalSection(&cs);
-		}
+			struct sockaddr_in Client;
+			int cbAddress = sizeof(Client);
 
-		struct sockaddr_in Client;
-		int cbAddress = sizeof(Client);
-
-		getpeername(ClientSession->sock, (struct sockaddr*)&Client, &cbAddress);
-		char IP[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &Client.sin_addr, IP, sizeof(IP));
-
-		/* 
-		   윈도우 전용 비동기 함수는 동작이 조금 다르다.
-		*/
-		if(ret == 0 || cbTransferred == 0 /* || ClientSession->EventType == NONE */){
-			ShowText("[TCP Server] Disconnected : %s(%d)\r\n", IP, ntohs(Client.sin_port));
-
-			EnterCriticalSection(&cs);
-			RemoveSocketNode(&L, CurrentNode);
-			LeaveCriticalSection(&cs);
-
-			/*
-				free 함수는 delete와 다르게 NULL에 대한 처리를 하지 않는 것으로 알고있다.
-				때문에 임계영역 내에서 한번에 동작하도록(원자성) 하는 것이 좋으나
-				위에서 말한 경우와 해당 분기가 여러번 발생하는 상황은 같이 극히 드문 경우이므로
-				고려하지 않기로 한다.
-			*/
-			DestroySocketNode(CurrentNode);
-			continue;
-		}
-
-		/* 
-			TODO : 데이터 송수신 응용프로그램간 프로토콜 설정
-
-			서버의 세부적인 동작을 정의하는 부분이다.
-			확장을 생각한다면 상황에 따라 비동기 함수를 호출할 수 있도록 이벤트 타입을 설정하고
-			이에 반응하는 콜백 함수를 활용하는 구조로 만드는 것이 좋다.
-
-			크게 확장할 생각은 없으므로 단순한 구조를 가지는 분기 처리 형태로 작성할 예정이다.
-
-			또한, 자동화 버퍼를 사용해도 좋으나 중계 역할만을 하는 서버 프로그램이므로
-			이는 생략한다.
-		*/
-		if(ClientSession->recv == 0 /* ClientSession->EventType == RECV */){
-			ClientSession->recv = cbTransferred;
-			ClientSession->send = 0;
-			ClientSession->buf[ClientSession->recv] = 0;
-			ShowText("[Addr : %s(%d)] %s\r\n", IP, ntohs(Client.sin_port), ClientSession->buf);
-		}else{
-			/*if(ClientSession->EventType == SEND)*/
-			ClientSession->send += cbTransferred;
-		}
-
-		if(ClientSession->recv > ClientSession->send){
-			memset(&ClientSession->ov, 0, sizeof(ClientSession->ov));
-
-			WSABUF wsabuf;
-			wsabuf.buf = ClientSession->buf + ClientSession->send;
-			wsabuf.len = ClientSession->recv - ClientSession->send;
-
-			DWORD dwSend, dwFlags = 0;
-			// ClientSession->EventType = SEND;
+			getpeername(ClientSession->sock, (struct sockaddr*)&Client, &cbAddress);
+			char IP[INET_ADDRSTRLEN];
+			inet_ntop(AF_INET, &Client.sin_addr, IP, sizeof(IP));
 
 			/* 
-				TODO : 브로드캐스팅 기능을 추가해야 한다.
-				윈속 함수 특성상 한 번에 보내고 받는게 가능하기 때문에
-				연결된 소켓의 개수를 확인하고 각 소켓에 있는 버퍼를 복사하여 한 번에 처리할 수 있다.
-
-				단, 해당 프로젝트에서는 단순 반복문으로 처리하기로 한다.
-				스레드가 어떠한 이유로 대기상태에 빠지거나 중단된 상태가 아니라면 사실상
-				하나씩 실행되어 통신을 수행하기 때문에 큰 문제는 발생하지 않는다.
+			   윈도우 전용 비동기 함수는 동작이 조금 다르다.
 			*/
-			EnterCriticalSection(&cs);
-			int N = GetNodeCount(L);
-			LeaveCriticalSection(&cs);
+			if(ret == 0 || cbTransferred == 0){
+				ShowText("[TCP Server] Disconnected : %s(%d)\r\n", IP, ntohs(Client.sin_port));
 
-			SocketNode *Target = NULL;
-			for(int i = 0; i < N; i++){
 				EnterCriticalSection(&cs);
-				Target = GetNodeAtLocation(L, i);
+				RemoveSocketNode(&L, CurrentNode);
 				LeaveCriticalSection(&cs);
 
-				ret = WSASend(Target->Info->sock, &wsabuf, 1, &dwSend, dwFlags, &ClientSession->ov, NULL);
+				/*
+					free 함수는 delete와 다르게 NULL에 대한 처리를 하지 않는 것으로 알고있다.
+					때문에 임계영역 내에서 한번에 동작하도록(원자성) 하는 것이 좋으나
+					위에서 말한 경우와 해당 분기가 여러번 발생하는 상황은 같이 극히 드문 경우이므로
+					고려하지 않기로 한다.
+				*/
+				DestroySocketNode(CurrentNode);
+				continue;
+			}
+
+			/* 
+				TODO : 데이터 송수신 응용프로그램간 프로토콜 설정
+
+				서버의 세부적인 동작을 정의하는 부분이다.
+				확장을 생각한다면 상황에 따라 비동기 함수를 호출할 수 있도록 이벤트 타입을 설정하고
+				이에 반응하는 콜백 함수를 활용하는 구조로 만드는 것이 좋다.
+
+				크게 확장할 생각은 없으므로 단순한 구조를 가지는 분기 처리 형태로 작성할 예정이다.
+
+				또한, 자동화 버퍼를 사용해도 좋으나 중계 역할만을 하는 서버 프로그램이므로
+				이는 생략한다.
+			*/
+			if(ClientSession->recv == 0){
+				ClientSession->recv = cbTransferred;
+				ClientSession->send = 0;
+				ClientSession->buf[ClientSession->recv] = 0;
+				ShowText("[Addr : %s(%d)] %s\r\n", IP, ntohs(Client.sin_port), ClientSession->buf);
+			}else{
+				/*if(ClientSession->EventType == SEND)*/
+				ClientSession->send += cbTransferred;
+			}
+
+			if(ClientSession->recv > ClientSession->send){
+				memset(&ClientSession->ov, 0, sizeof(ClientSession->ov));
+
+				WSABUF wsabuf;
+				wsabuf.buf = ClientSession->buf + ClientSession->send;
+				wsabuf.len = ClientSession->recv - ClientSession->send;
+
+				DWORD dwSend, dwFlags = 0;
+				// ClientSession->EventType = SEND;
+
+				/* 
+					TODO : 브로드캐스팅 기능을 추가해야 한다.
+					윈속 함수 특성상 한 번에 보내고 받는게 가능하기 때문에
+					연결된 소켓의 개수를 확인하고 각 소켓에 있는 버퍼를 복사하여 한 번에 처리할 수 있다.
+
+					단, 해당 프로젝트에서는 단순 반복문으로 처리하기로 한다.
+					스레드가 어떠한 이유로 대기상태에 빠지거나 중단된 상태가 아니라면 사실상
+					하나씩 실행되어 통신을 수행하기 때문에 큰 문제는 발생하지 않는다.
+				*/
+				EnterCriticalSection(&cs);
+				int N = GetNodeCount(L);
+				LeaveCriticalSection(&cs);
+
+				SocketNode *Target = NULL;
+				for(int i = 0; i < N; i++){
+					EnterCriticalSection(&cs);
+					Target = GetNodeAtLocation(L, i);
+					LeaveCriticalSection(&cs);
+
+					ret = WSASend(Target->Info->sock, &wsabuf, 1, &dwSend, dwFlags, &ClientSession->ov, NULL);
+					if(ret == SOCKET_ERROR){
+						if(WSAGetLastError() != WSA_IO_PENDING){
+							ShowError("WSASend()");
+						}
+						continue;
+					}else{
+						DWORD dwError = GetLastError();
+						TCHAR buf[256];
+						StringCbPrintf(buf, sizeof(buf), TEXT("GetLastError() = %d"), dwError);
+						MessageBox(HWND_DESKTOP, buf, TEXT("Alarm"), MB_OK);
+
+					}
+				}
+			}else{
+				/* recv == send | recv < send */
+				memset(&ClientSession->ov, 0, sizeof(ClientSession->ov));
+				ClientSession->recv = 0;
+				// ClientSession->EventType = RECV;		// 클라이언트 통신을 위한 RECV 이벤트 재등록
+				
+				WSABUF wsabuf;
+				wsabuf.buf = ClientSession->buf;
+				wsabuf.len = BUFSIZE;
+
+				DWORD dwRecv, dwFlags;
+				ret = WSARecv(ClientSession->sock, &wsabuf, 1, &dwRecv, &dwFlags, &ClientSession->ov, NULL);
+
 				if(ret == SOCKET_ERROR){
 					if(WSAGetLastError() != WSA_IO_PENDING){
-						ShowError("WSASend()");
+						ShowError("WSARecv()");
 					}
 					continue;
 				}
 			}
 		}else{
-			/* recv == send | recv < send */
-			memset(&ClientSession->ov, 0, sizeof(ClientSession->ov));
-			ClientSession->recv = 0;
-			// ClientSession->EventType = RECV;		// 클라이언트 통신을 위한 RECV 이벤트 재등록
-			
-			WSABUF wsabuf;
-			wsabuf.buf = ClientSession->buf;
-			wsabuf.len = BUFSIZE;
+			DWORD dwError = GetLastError();
+			TCHAR buf[256];
+			StringCbPrintf(buf, sizeof(buf), TEXT("GetLastError() = %d"), dwError);
+			MessageBox(HWND_DESKTOP, buf, TEXT("Alarm"), MB_OK);
 
-			DWORD dwRecv, dwFlags;
-			ret = WSARecv(ClientSession->sock, &wsabuf, 1, &dwRecv, &dwFlags, &ClientSession->ov, NULL);
-
-			if(ret == SOCKET_ERROR){
-				if(WSAGetLastError() != WSA_IO_PENDING){
-					ShowError("WSARecv()");
-				}
-				continue;
-			}
+			break;
 		}
 	}
 

@@ -40,6 +40,9 @@
 #define LCLASSNAME			TEXT("EditPannelClass")
 #define RCLASSNAME			TEXT("ButtonPannelClass")
 
+#define WM_RECVDATA			WM_USER+1
+#define WM_SENDDATA			WM_USER+2
+
 /* Declare a Procedure */
 INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -89,6 +92,11 @@ static struct tag_DlgInOut{
 };
 
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
+
+struct tag_Packet{
+	DWORD dwTransferred;
+	BOOL bEcho;
+};
 
 /*	
 	// 전역 변수로 아래와 같이 읽기 전용 문자열을 만들었으나 런타임 시간에 배열 첨자 연산이 추가되고 보안(잘못된 메모리 접근) 위험이 있기 때문에 매크로 상수와 매크로 함수를 이용하기로 한다.
@@ -188,8 +196,8 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	INITCOMMONCONTROLSEX icex = {sizeof(icex), ICC_DATE_CLASSES};
 	if(!InitCommonControlsEx(&icex)){ Exit(ERR(FAILED_LOADDLL)); }
 
-	HANDLE hCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0,0);
-	if(hCP == NULL){ Exit(ERR(FAILED_CREATECOMPLETIONPORT)); }
+	// HANDLE hCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0,0);
+	// if(hCP == NULL){ Exit(ERR(FAILED_CREATECOMPLETIONPORT)); }
 
 	HANDLE hTimer = CreateWaitableTimer(NULL, FALSE, TIMERID);
 	if(hTimer == NULL){ Exit(ERR(FAILED_CREATETIMER)); }
@@ -200,7 +208,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	DWORD TlsIndex = TlsAlloc();
 	if(TlsIndex == TLS_OUT_OF_INDEXES){ Exit(ERR(FAILED_ALLOCATEMEMORY)); }
 
-	HANDLE hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(SOCKET*) + sizeof(HANDLE) + sizeof(DWORD), MAPPINGID);
+	HANDLE hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(SOCKET*) + sizeof(HANDLE) + sizeof(HWND) + sizeof(DWORD), MAPPINGID);
 	if(hMap == NULL){ Exit(ERR(FAILED_CREATESECTION)); }
 
 	TCHAR* wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, 0);
@@ -208,7 +216,6 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 
 	memcpy(wrPtr, &sock, sizeof(SOCKET*));
 	memcpy(wrPtr + sizeof(SOCKET*), &hCP, sizeof(HANDLE));
-	memcpy(wrPtr + sizeof(SOCKET*) + sizeof(HANDLE), &TlsIndex, sizeof(DWORD));
 
 	WNDCLASS wc = {
 		CS_HREDRAW | CS_VREDRAW,
@@ -249,6 +256,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 			);
 
 	ShowWindow(hWnd, nCmdShow);
+
+	memcpy(wrPtr + sizeof(SOCKET*) + sizeof(HANDLE), &hWnd, sizeof(HWND));
+	memcpy(wrPtr + sizeof(SOCKET*) + sizeof(HWND) + sizeof(HANDLE), &TlsIndex, sizeof(DWORD));
 
 	HANDLE hRecvEvent, hSendEvent, hConnectEvent;
 	hRecvEvent = CreateEvent(NULL, FALSE, FALSE, RECVEVENTID);
@@ -335,7 +345,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam)
 			return 0;
 
 		case WM_INITMENU:
-			/* TODO: 연결 상태를 체크 모양으로 표시 */ 
 			if(DlgInOut.bConnect){
 				CheckMenuRadioItem(GetSubMenu((HMENU)wParam, 0), 0, 0, 0, MF_BYPOSITION);
 			}
@@ -548,6 +557,8 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 	DWORD dwError, dwSend, dwFlags;
 	OVERLAPPED ov;
 
+	struct tag_Packet *Header;
+
 	switch(iMessage){
 		case WM_CREATE:
 			hSendBtn = CreateWindow(TEXT("button"), TEXT("Send"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 0,0,0,0, hWnd, (HMENU)IDC_BTNSEND, GetModuleHandle(NULL), NULL);
@@ -599,9 +610,7 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 								// TODO: 함수 호출
 								LengthW = SendMessage(hMsgEdit, WM_GETTEXTLENGTH, 0, 0);
 								bufT = (TCHAR*)malloc(LengthW + 1);
-
-								SendMessage(hMsgEdit, WM_GETTEXT, LengthW+1, (LPARAM)bufT);
-								bufT[LengthW+1] = 0;
+								SendMessage(hMsgEdit, WM_GETTEXT, LengthW, (LPARAM)bufT);
 
 								LengthA = WideCharToMultiByte(CP_ACP, 0, bufT, -1, NULL, 0, NULL, NULL);
 								if(LengthA == 0){
@@ -613,7 +622,7 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 									return dwError;
 								}
 
-								bufA = (char*)malloc(LengthA);
+								bufA = (char*)malloc(LengthA + sizeof(struct tag_Packet));
 								if(WideCharToMultiByte(CP_ACP, 0, bufT, -1, bufA, LengthA, NULL, NULL) == 0){ 
 									dwError = ErrorMessage(ERR(FAILED_ENCODING));
 									if(bufA){free(bufA);}
@@ -624,8 +633,11 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 									return dwError;
 								}
 
+								Header = (struct tag_Packet*)bufA;
+								Header->dwTransferred = LengthA;
+								Header->bEcho = TRUE;
 								wsabuf.buf = bufA;
-								wsabuf.len = LengthA;
+								wsabuf.len = LengthA + sizeof(struct tag_Packet);
 
 								dwFlags = 0;
 								memset(&ov, 0, sizeof(ov));
@@ -683,16 +695,63 @@ LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPAR
 	PAINTSTRUCT ps;
 	HDC hdc;
 
+	BYTE* pData;
+	static BYTE* pBuffer;
+	struct tag_Packet* Header;
+
+	DWORD dwTransferred;
+	BOOL bEcho;
+
 	switch(iMessage){
 		case WM_CREATE:
 			return 0;
 
+		case WM_RECVDATA:
+			MessageBox(hWnd, TEXT("Recv"), TEXT("Alarm"), MB_OK);
+			/*
+			pData = (BYTE*)lParam;
+			Header = (struct tag_Packet*)pData;
+			dwTransferred = Header->dwTransferred;
+			bEcho = Header->bEcho;
+
+			if(!bEcho){
+
+			}
+			*/
+			return 0;
+			
+		case WM_SENDDATA:
+			{
+				pData = (BYTE*)lParam;
+				Header = (struct tag_Packet*)pData;
+				dwTransferred = Header->dwTransferred;
+				bEcho = Header->bEcho;
+				pData = (BYTE*)lParam + sizeof(struct tag_Packet);
+
+				TCHAR buf[256];
+				StringCbPrintf(buf, sizeof(buf), TEXT("bEcho = %s, buf = %s(%d)"), bEcho ? TEXT("TRUE") : TEXT("FALSE"), pData, dwTransferred);
+				MessageBox(hWnd, buf, TEXT("Alarm"), MB_OK);
+			}
+			/*
+			pData = (BYTE*)lParam;
+			Header = ((struct tag_Packet*)pData);
+			dwTransferred = Header->dwTransferred;
+			pData = (BYTE*)lParam + sizeof(struct tag_Packet);
+			dwTransferred -= sizeof(struct tag_Packet);
+			pBuffer = (BYTE*)malloc(sizeof(BYTE) * dwTransferred);
+			*/
+			return 0;
+
 		case WM_PAINT:
 			hdc = BeginPaint(hWnd, &ps);
+			if(pBuffer != NULL){
+				TextOutA(hdc, 10, 10, pBuffer, lstrlenA(pBuffer));
+			}
 			EndPaint(hWnd, &ps);
 			return 0;
 
 		case WM_DESTROY:
+			free(pBuffer);
 			return 0;
 	}
 
@@ -894,14 +953,24 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 		closesocket(*sock);
 		return dwLastError;
 	}
-	DlgInOut->bConnect = TRUE;
 
+	/*
+	   IoCompletionPort 모델은 프로세스간 공유가 불가능하다.
+	   CreateIoCompletionPort 함수가 생성하는 입출력 완료 포트는 자신을 호출하는 프로세스에 연결되며 이는 지역적이다.
+	   즉, 다른 프로세스가 접근할 수 없으며 그럴 필요도 없다.
+
+	   서버 측에서 CompletionIoPort를 생성하면 클라이언트 측은 연결한 소켓으로 입출력 함수만 호출하면 된다.
+	   포트를 할당하고 프로세스에 붙이기 때문에 클라이언트 측에서 이를 호출하고 소켓을 연결하면 설정이 이상해진다.
+	   WSASend 함수에서 에러(10045)가 발생하며 지원되지 않는 작업이라 나온다.
+	*/
+	/*
 	hCP = CreateIoCompletionPort((HANDLE)(*sock), hCP, 0, 0);
 	if(hCP == NULL){ 
 		dwLastError = WSAErrorMessage(ERR(FAILED_CONNECTSOCKET));
 		closesocket(*sock);
 		return dwLastError;
 	}
+	*/
 
 	hConnectEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, CONNECTEVENTID);
 	if(hConnectEvent == NULL){ 
@@ -911,6 +980,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	}
 
 	if(SetEvent(hConnectEvent)){
+		DlgInOut->bConnect = TRUE;
 		CloseHandle(hConnectEvent);
 	}else{
 		dwLastError = WSAErrorMessage(ERR(FAILED_CONNECTSOCKET));
@@ -923,11 +993,11 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION));}
 
 	TCHAR* wrPtr;
-	wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(SOCKET*) + sizeof(hCP));
+	wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(SOCKET*) + sizeof(HANDLE));
 	if(wrPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION));}
 
 	memcpy(wrPtr, &sock, sizeof(SOCKET*));
-	memcpy(wrPtr + sizeof(SOCKET*), &hCP, sizeof(HANDLE));
+	// memcpy(wrPtr + sizeof(SOCKET*), &hCP, sizeof(HANDLE));
 
 	UnmapViewOfFile(wrPtr);
 	CloseHandle(hMap);
@@ -1008,16 +1078,16 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 }
 
 DWORD WINAPI WorkerThread(LPVOID lpArg){
-	/* TODO: 여기서 전달된 핸들이 유효하지 않은 것으로 예상되니 공유 섹션 열어서 직접 가져올 것 */
 	HANDLE hCP, hMap, hSendEvent, hConnectEvent;
 	DWORD dwTransferred, dwEvent, dwError;
 	SOCKET* sock;
 	TCHAR* rdPtr;
+	HWND hParent;
 
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
 	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION));}
 
-	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HANDLE));
+	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HANDLE) + sizeof(HWND));
 	if(rdPtr == NULL){ 
 		dwError = ErrorMessage(ERR(FAILED_READSECTION));
 		CloseHandle(hMap);
@@ -1025,7 +1095,8 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	}
 
 	memcpy(&sock, rdPtr, sizeof(SOCKET*));
-	memcpy(&hCP, rdPtr + sizeof(SOCKET*), sizeof(HANDLE));
+	// memcpy(&hCP, rdPtr + sizeof(SOCKET*), sizeof(HANDLE));
+	memcpy(&hParent, rdPtr + sizeof(SOCKET*) + sizeof(HANDLE), sizeof(HWND));
 
 	UnmapViewOfFile(rdPtr);
 	CloseHandle(hMap);
@@ -1043,32 +1114,40 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 	OVERLAPPED ov;
 	WSABUF wsabuf;
 	DWORD dwRecv, dwFlags;
-	char buf[256];
+	HWND hDisplayWnd = FindWindowEx(hParent, NULL, TCLASSNAME, NULL);
+	if(hDisplayWnd == NULL){ Exit(ERRFUNC(FindWindowEx(), FAILED_FUNCTION)); }
+	BYTE buf[0x400];
 	while(1){
 		dwEvent = WaitForSingleObject(hConnectEvent, 0);
 		if(dwEvent == WAIT_OBJECT_0){
+			// Recv Call
 			wsabuf.buf = buf;
-			wsabuf.len = 256;
+			wsabuf.len = 0x400;
 			memset(&ov, 0, sizeof(ov));
 			WSARecv(*sock, &wsabuf, 1, &dwRecv, &dwFlags, &ov, NULL);
 
 			// 감시할 소켓을 등록할 때는 정보를 전달하지 않아도 괜찮으나 
 			// 세 번째 인수인 CompletionKey를 전달받지 않으면 커널 시스템에서 오류를 발생시킨다.
 			ULONG_PTR CompletionKey;
+			// TODO: CompletionPort와 관련된 모든 내용 삭제하고 비동기 입출력 함수만 호출, 통신 전용 스레드 두 개로 분리할 것
 			if(GetQueuedCompletionStatus(hCP, &dwTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ov, INFINITE)){
-				// TODO: 데이터 recv인지 send인지 구분할 방법 찾고 프로세싱
+				if(dwTransferred == 0){continue;}
+
 				dwEvent = WaitForSingleObject(hSendEvent, 0);
 
 				switch(dwEvent){
 					case WAIT_TIMEOUT:
-						// Recv Job
+						// SendMessage로 버퍼 전달시 버퍼 비어있음
+						SendMessage(hDisplayWnd, WM_RECVDATA, (WPARAM)0, (LPARAM)buf);
 						break;
 
 					case WAIT_OBJECT_0:
 						if(ResetEvent(hSendEvent)){
-							// Send Job
+							// Send Job : I/O 패킷을 큐에서 제거하고 복사하였다는 의미이므로 데이터 전송에 성공했다고 볼 수 있다.
+							SendMessage(hDisplayWnd, WM_SENDDATA, (WPARAM)0, (LPARAM)buf);
 						}else{
-							ErrorMessage(ERRFUNC(ResetEvent(), FAILED_FUNCTION));
+							dwError = ErrorMessage(ERRFUNC(ResetEvent(), FAILED_FUNCTION));
+							return dwError;
 						}
 						break;
 
@@ -1099,7 +1178,7 @@ DWORD WINAPI WorkerThread(LPVOID lpArg){
 						break;
 
 					case ERROR_NOACCESS:
-						// Exit(ERR(ACCESS_VIOLATION));
+						Exit(ERR(ACCESS_VIOLATION));
 						break;
 
 					case ERROR_SUCCESS:
