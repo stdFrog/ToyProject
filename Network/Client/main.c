@@ -11,15 +11,17 @@
 #include <commctrl.h>
 #include <strsafe.h>
 
-/* Main Window Control ID */
+#define DEFAULT_BUFLEN 0x400
+
+// Main Window Control ID
 #define IDC_BTNSEND			101
 #define IDC_EDMSG			201
 
-/* Dialog Control ID */
+// Dialog Control ID
 #define IDC_DLGEDIPADDRESS	1101
 #define IDC_DLGEDPORT		1201
 
-/* Menu ID */
+// Menu ID
 #define ID_CONFIGCONNECT	40001
 
 #define THICKNESS			3
@@ -27,7 +29,7 @@
 //#define SERVERIP			"127.0.0.1"
 //#define SERVERPORT		9000
 
-/* ID of the Sync Object. */
+// ID of the Sync Object.
 #define RECVEVENTID			TEXT("Local\\ExampleRecvEvent_25_01_20")
 #define SENDEVENTID			TEXT("Local\\ExampleSendEvent_25_01_20")
 #define CONNECTEVENTID		TEXT("Local\\ExampleConnectEvent_25_01_20")
@@ -40,10 +42,9 @@
 #define LCLASSNAME			TEXT("EditPannelClass")
 #define RCLASSNAME			TEXT("ButtonPannelClass")
 
-#define WM_RECVDATA			WM_USER+1
-#define WM_SENDDATA			WM_USER+2
+#define WM_DATATRANSFER		WM_USER+1
 
-/* Declare a Procedure */
+// Declare a Procedure
 INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK WndProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
@@ -51,12 +52,12 @@ LRESULT CALLBACK EditPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM 
 LRESULT CALLBACK EditSubProc(HWND hWnd,UINT iMessage,WPARAM wParam,LPARAM lParam);
 LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
-/* Declare a SubThread */
+// Declare a SubThread
 DWORD WINAPI ClientMain(LPVOID lpArg);
 DWORD WINAPI SendThread(LPVOID lpArg);
 DWORD WINAPI RecvThread(LPVOID lpArg);
 
-/* Declare a Util */
+// Declare a Util
 void Exit(TCHAR* msg); 
 void WSAExit(TCHAR* msg);
 DWORD ErrorMessage(TCHAR* msg);
@@ -64,7 +65,7 @@ DWORD WSAErrorMessage(TCHAR* msg);
 void ShowMessage(TCHAR* buf);
 BOOL CheckSplitBar(HWND hWnd, POINT pt, int DisplayPannelRatio);
 
-/* Indirect Dialog */
+// Indirect Dialog
 #define DLGTITLE			TEXT("InputBox")
 #define DLGFONT				TEXT("MS Sans Serif")
 #define SIZEOF(str)			(sizeof(str)/sizeof((str)[0]))
@@ -206,13 +207,13 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	DWORD TlsIndex = TlsAlloc();
 	if(TlsIndex == TLS_OUT_OF_INDEXES){ Exit(ERR(FAILED_ALLOCATEMEMORY)); }
 
-	HANDLE hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(SOCKET*) + sizeof(HWND) + sizeof(DWORD), MAPPINGID);
+	HANDLE hMap = CreateFileMapping(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(SOCKET) + sizeof(HWND) + sizeof(DWORD), MAPPINGID);
 	if(hMap == NULL){ Exit(ERR(FAILED_CREATESECTION)); }
 
 	TCHAR* wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, 0);
 	if(wrPtr == NULL){ Exit(ERR(FAILED_READSECTION)); }
 
-	memcpy(wrPtr, &sock, sizeof(SOCKET*));
+	memcpy(wrPtr, sock, sizeof(SOCKET));
 
 	WNDCLASS wc = {
 		CS_HREDRAW | CS_VREDRAW,
@@ -258,9 +259,9 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	memcpy(wrPtr + sizeof(SOCKET*) + sizeof(HWND), &TlsIndex, sizeof(DWORD));
 
 	HANDLE hRecvEvent, hSendEvent, hConnectEvent;
-	hRecvEvent = CreateEvent(NULL, FALSE, FALSE, RECVEVENTID);
+	hRecvEvent = CreateEvent(NULL, TRUE, FALSE, RECVEVENTID);
 	if(hRecvEvent == NULL){ Exit(ERR(FAILED_CREATEEVENT)); }
-	hSendEvent = CreateEvent(NULL, FALSE, FALSE, SENDEVENTID);
+	hSendEvent = CreateEvent(NULL, TRUE, FALSE, SENDEVENTID);
 	if(hSendEvent == NULL){ Exit(ERR(FAILED_CREATEEVENT)); }
 	hConnectEvent = CreateEvent(NULL, TRUE, FALSE, CONNECTEVENTID);
 	if(hConnectEvent == NULL){ Exit(ERR(FAILED_CREATEEVENT)); }
@@ -547,7 +548,7 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 	int LengthW, LengthA;
 
 	HANDLE hSendEvent, hMap;
-	SOCKET* sock;
+	SOCKET sock;
 	TCHAR* rdPtr;
 	WSABUF wsabuf;
 	DWORD dwError, dwSend, dwFlags;
@@ -574,7 +575,14 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 							hMsgEdit = FindWindowEx(hEditPannel, NULL, TEXT("edit"), NULL);
 						}
 
-						SetEvent(hSendEvent);
+						hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
+						if(hSendEvent == NULL){
+							return ErrorMessage(ERR(FAILED_LOADEVENT));
+						}
+
+						if(WaitForSingleObject(hSendEvent, 0) == WAIT_TIMEOUT){
+							SetEvent(hSendEvent);
+						}
 						/*
 
 						// TODO : 연결상태 확인 - MenuItem
@@ -595,14 +603,6 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 						}
 
 						memcpy(&sock, rdPtr, sizeof(SOCKET*));
-
-						hSendEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, SENDEVENTID);
-						if(hSendEvent == NULL){
-							dwError = ErrorMessage(ERR(FAILED_LOADEVENT));
-							UnmapViewOfFile(rdPtr);
-							CloseHandle(hMap);
-							return dwError;
-						}
 
 						if(sock != NULL){
 							if(SetEvent(hSendEvent)){
@@ -708,40 +708,7 @@ LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPAR
 		case WM_CREATE:
 			return 0;
 
-		case WM_RECVDATA:
-			MessageBox(hWnd, TEXT("Recv"), TEXT("Alarm"), MB_OK);
-			/*
-			pData = (BYTE*)lParam;
-			Header = (struct tag_Packet*)pData;
-			dwTransferred = Header->dwTransferred;
-			bEcho = Header->bEcho;
-
-			if(!bEcho){
-
-			}
-			*/
-			return 0;
-			
-		case WM_SENDDATA:
-			{
-				pData = (BYTE*)lParam;
-				Header = (struct tag_Packet*)pData;
-				dwTransferred = Header->dwTransferred;
-				bEcho = Header->bEcho;
-				pData = (BYTE*)lParam + sizeof(struct tag_Packet);
-
-				TCHAR buf[256];
-				StringCbPrintf(buf, sizeof(buf), TEXT("bEcho = %s, buf = %s(%d)"), bEcho ? TEXT("TRUE") : TEXT("FALSE"), pData, dwTransferred);
-				MessageBox(hWnd, buf, TEXT("Alarm"), MB_OK);
-			}
-			/*
-			pData = (BYTE*)lParam;
-			Header = ((struct tag_Packet*)pData);
-			dwTransferred = Header->dwTransferred;
-			pData = (BYTE*)lParam + sizeof(struct tag_Packet);
-			dwTransferred -= sizeof(struct tag_Packet);
-			pBuffer = (BYTE*)malloc(sizeof(BYTE) * dwTransferred);
-			*/
+		case WM_DATATRANSFER:
 			return 0;
 
 		case WM_PAINT:
@@ -890,7 +857,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 DWORD WINAPI ClientMain(LPVOID lpArg){
 	HANDLE hMap, hCP, hConnectEvent;
 	DWORD dwLastError;
-	SOCKET *sock;
+	SOCKET sock;
 	TCHAR* rdPtr;
 
 	struct tag_DlgInOut* DlgInOut = (struct tag_DlgInOut*)lpArg;
@@ -898,16 +865,16 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
 	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION)); }
 
-	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*));
+	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET));
 	if(rdPtr == NULL){ CloseHandle(hMap); return ErrorMessage(ERR(FAILED_READSECTION));}
 
-	memcpy(&sock, rdPtr, sizeof(SOCKET*));
+	memcpy(&sock, rdPtr, sizeof(SOCKET));
 
 	UnmapViewOfFile(rdPtr);
 	CloseHandle(hMap);
 
-	*sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if(*sock == INVALID_SOCKET){ return WSAErrorMessage(ERR(FAILED_CREATESOCKET)); }
+	sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if(sock == INVALID_SOCKET){ return WSAErrorMessage(ERR(FAILED_CREATESOCKET)); }
 
 	struct sockaddr_in Server;
 	char IPAddressA[INET_ADDRSTRLEN];
@@ -916,7 +883,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	// 시간되면 에러값 반응하는 콜백 함수나 플래그 활용해서 메세지 처리
 	if(GetAtomNameA(DlgInOut->IPAtom, IPAddressA, INET_ADDRSTRLEN) == 0 || GetAtomNameA(DlgInOut->PortAtom, szPortA, 0x10) == 0){
 		dwLastError = ErrorMessage(ERRFUNC(GetAtomName(), FAILED_FUNCTION));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 	short unsigned int uhdPort = atoi(szPortA + 1);
@@ -925,18 +892,18 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	inet_pton(AF_INET, IPAddressA /* SERVERIP */, &Server.sin_addr);
 	Server.sin_port = htons(uhdPort /* SERVERPORT */);
 
-	int ret = connect(*sock, (struct sockaddr*)&Server, sizeof(Server));
+	int ret = connect(sock, (struct sockaddr*)&Server, sizeof(Server));
 	if(ret == SOCKET_ERROR){
-		// WSACONNREFUSED : 연결 거부
+		// WSAECONNREFUSED : 연결 거부
 		dwLastError = WSAErrorMessage(ERR(FAILED_CONNECTSOCKET));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 
 	hConnectEvent = OpenEvent(EVENT_MODIFY_STATE, FALSE, CONNECTEVENTID);
 	if(hConnectEvent == NULL){ 
 		dwLastError = ErrorMessage(ERR(FAILED_CONNECTSOCKET));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 
@@ -945,7 +912,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 		CloseHandle(hConnectEvent);
 	}else{
 		dwLastError = ErrorMessage(ERR(FAILED_CONNECTSOCKET));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 
@@ -957,7 +924,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	wrPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(SOCKET*));
 	if(wrPtr == NULL){ return ErrorMessage(ERR(FAILED_READSECTION));}
 
-	memcpy(wrPtr, &sock, sizeof(SOCKET*));
+	memcpy(wrPtr, &sock, sizeof(SOCKET));
 
 	UnmapViewOfFile(wrPtr);
 	CloseHandle(hMap);
@@ -973,14 +940,14 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 
 	if(hTransferThread[RECV] == NULL || hTransferThread[SEND] == NULL){ 
 		dwLastError = ErrorMessage(ERR(FAILED_CREATETHREAD));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 
 	HANDLE hTimer = OpenWaitableTimer(TIMER_MODIFY_STATE | TIMER_QUERY_STATE | SYNCHRONIZE, FALSE, TIMERID);
 	if(hTimer == NULL){
 		dwLastError = ErrorMessage(ERR(FAILED_LOADTIMER));
-		closesocket(*sock);
+		// closesocket(*sock);
 		return dwLastError;
 	}
 
@@ -992,7 +959,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	BOOL bClientMainExceptLoop = TRUE;
 
 	while(bClientMainExceptLoop){
-		/* 60초마다 실행 */
+		// 60초마다 실행
 		dwTimer = WaitForSingleObject(hTimer, INFINITE);
 		dwThread = WaitForMultipleObjects(2, hTransferThread, FALSE, 0);
 
@@ -1043,7 +1010,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 	if(hTimer){CloseHandle(hTimer);}
 	if(hTransferThread[0]){CloseHandle(hTransferThread[0]);}
 	if(hTransferThread[1]){CloseHandle(hTransferThread[1]);}
-	if(*sock){closesocket(*sock);}
+	if(sock){closesocket(sock);}
 	//if(hConnectEvent){CloseHandle(hConnectEvent);}
 		
 	return 0; //dwExitCode;
@@ -1051,7 +1018,7 @@ DWORD WINAPI ClientMain(LPVOID lpArg){
 
 DWORD WINAPI RecvThread(LPVOID lpArg){
 	HANDLE hMap, hConnectEvent; // hRecvevent;
-	SOCKET* sock;
+	SOCKET sock;
 	TCHAR* rdPtr;
 	HWND hParent;
 	int ret;
@@ -1059,11 +1026,11 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
 	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION)); }
 
-	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HWND));
+	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET) + sizeof(HWND));
 	if(rdPtr == NULL){ CloseHandle(hMap); return ErrorMessage(ERR(FAILED_READSECTION));}
 
-	memcpy(&sock, rdPtr, sizeof(SOCKET*));
-	memcpy(&hParent, rdPtr + sizeof(SOCKET*), sizeof(HWND));
+	memcpy(&sock, rdPtr, sizeof(SOCKET));
+	memcpy(&hParent, rdPtr + sizeof(SOCKET), sizeof(HWND));
 
 	UnmapViewOfFile(rdPtr);
 	CloseHandle(hMap);
@@ -1078,9 +1045,9 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 	if(hConnectEvent == NULL){ return ErrorMessage(ERR(FAILED_CONNECTSOCKET)); }
 
 	char buf[0x400];
-	struct tag_Packet *Header;
+	struct tag_Packet* Header;
 	while(WaitForSingleObject(hConnectEvent, 0) == WAIT_OBJECT_0){
-		ret = recv(*sock, buf, 0x400, MSG_WAITALL);
+		ret = recv(sock, buf, DEFAULT_BUFLEN, MSG_WAITALL);
 		if(ret == 0 || ret == SOCKET_ERROR){
 			// 연결이 정상 종료(0) 또는 오류 발생(SOCKET_ERROR)
 			break;
@@ -1090,7 +1057,7 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 		Header = (struct tag_Packet*)buf;
 		int MsgLength = Header->dwTransferred;
 
-		//TODO: 데이터 가공해서 DisplayWnd에 전달
+		//TODO: 데이터 Parse 후 DisplayWnd에 전달
 	}
 
 	if(hConnectEvent){CloseHandle(hConnectEvent);}
@@ -1100,7 +1067,7 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 
 DWORD WINAPI SendThread(LPVOID lpArg){
 	HANDLE hMap, hConnectEvent, hSendEvent;
-	SOCKET* sock;
+	SOCKET sock;
 	TCHAR* rdPtr;
 	HWND hParent;
 	int ret;
@@ -1108,11 +1075,11 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 	hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
 	if(hMap == NULL){ return ErrorMessage(ERR(FAILED_LOADSECTION)); }
 
-	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*) + sizeof(HWND));
+	rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET) + sizeof(HWND));
 	if(rdPtr == NULL){ CloseHandle(hMap); return ErrorMessage(ERR(FAILED_READSECTION));}
 
-	memcpy(&sock, rdPtr, sizeof(SOCKET*));
-	memcpy(&hParent, rdPtr + sizeof(SOCKET*), sizeof(HWND));
+	memcpy(&sock, rdPtr, sizeof(SOCKET));
+	memcpy(&hParent, rdPtr + sizeof(SOCKET), sizeof(HWND));
 
 	UnmapViewOfFile(rdPtr);
 	CloseHandle(hMap);
@@ -1132,18 +1099,47 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 	hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
 	if(hSendEvent == NULL){ Exit(ERR(FAILED_LOADEVENT)); }
 
-	char buf[0x400];
+	int Length, ConvertLength, CopyLength, HeaderSize;
+	char bufA[DEFAULT_BUFLEN];
+	wchar_t bufW[DEFAULT_BUFLEN];
+
+	struct tag_Packet* Header;
+	HeaderSize = sizeof(struct tag_Packet);
+
 	while(WaitForSingleObject(hConnectEvent, 0) == WAIT_OBJECT_0){
 		WaitForSingleObject(hSendEvent, INFINITE);
 
-		//TODO: MsgEdit에서 데이터 가져오기
+		BOOL bUnicode = IsWindowUnicode(hMsgEditWnd);
+		Length = SendMessage(hMsgEditWnd, WM_GETTEXTLENGTH, 0,0);
+		if(bUnicode){
+			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, DEFAULT_BUFLEN, (LPARAM)bufW);
+			bufW[CopyLength] = 0;
+			ConvertLength = WideCharToMultiByte(CP_ACP, 0, bufW, -1, NULL, 0, NULL, NULL);
+			WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA + HeaderSize, ConvertLength, NULL, NULL);
+			CopyLength = ConvertLength + HeaderSize;
+		}else{
+			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, Length+1, (LPARAM)(bufA + HeaderSize));
+			CopyLength += 1;	// NULL 포함
+		}
 
-		//TODO: Serialize 작업후 전달
-		ret = send(*sock, buf, 0x400, MSG_WAITALL);
+		// 비트맵이나 아이콘일 경우 0
+		if(CopyLength == 1 || CopyLength == HeaderSize){
+			ResetEvent(hSendEvent);
+			ErrorMessage(TEXT("It is not a supported format. You can only send text formats."));
+			continue;
+		}
+
+		Header = (struct tag_Packet*)bufA;
+		Header->dwTransferred = CopyLength;
+		ret = send(sock, bufA, DEFAULT_BUFLEN, 0);
 		if(ret == SOCKET_ERROR){
 			// 오류 발생(SOCKET_ERROR)
+			ResetEvent(hSendEvent);
+			ErrorMessage(TEXT("Data transfer failed."));
 			break;
 		}
+
+		//TODO: 전송한 데이터를 DisplayWnd에 전달하고 종료
 
 		ResetEvent(hSendEvent);
 	}
@@ -1154,7 +1150,7 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 	return 0;
 }
 
-/* Utility */
+// Utility
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg){
 	HINSTANCE hInst;
 
@@ -1193,7 +1189,7 @@ void Exit(TCHAR* msg) {
 	}
 
 	TCHAR buf[0x1000];
-	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), lpMsgBuf, dw, msg);
+	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), dw, lpMsgBuf, msg);
 	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONERROR | MB_OK);
 
 	LocalFree(lpMsgBuf);
@@ -1210,7 +1206,7 @@ void WSAExit(TCHAR* msg) {
 	}
 
 	TCHAR buf[0x1000];
-	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), lpMsgBuf, err, msg);
+	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), err, lpMsgBuf, msg);
 	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONERROR | MB_OK);
 
 	LocalFree(lpMsgBuf);
@@ -1229,7 +1225,7 @@ DWORD ErrorMessage(TCHAR* msg){
 	}
 
 	TCHAR buf[0x1000];
-	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), lpMsgBuf, dw, msg);
+	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), dw, lpMsgBuf, msg);
 	MessageBox(HWND_DESKTOP, (LPCTSTR)buf, TEXT("Error"), MB_ICONWARNING | MB_OK);
 	LocalFree(lpMsgBuf);
 
@@ -1246,7 +1242,7 @@ DWORD WSAErrorMessage(TCHAR* msg){
 	}
 
 	TCHAR buf[0x1000];
-	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), lpMsgBuf, err, msg);
+	StringCbPrintf(buf, sizeof(buf), TEXT("(%d)%s\r\n%s"), err, lpMsgBuf, msg);
 	MessageBox(HWND_DESKTOP, (LPCTSTR)lpMsgBuf, TEXT("Error"), MB_ICONWARNING | MB_OK);
 	LocalFree(lpMsgBuf);
 
