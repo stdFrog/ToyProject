@@ -123,6 +123,7 @@ static SocketNode* L;
 static CRITICAL_SECTION cs;
 static BOOL bRunning;
 static HWND hEdit;
+static HANDLE g_hcp;
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 	InitializeCriticalSection(&cs);
@@ -173,6 +174,16 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 
 	DeleteCriticalSection(&cs);
 	DestroyQueue(Q);
+	
+	int cnt = GetNodeCount(L);
+	for(int i=0; i<cnt; i++){
+		SocketNode* Target = GetNodeAtLocation(L, 0);
+
+		if(Target != NULL){
+			RemoveSocketNode(&L, Target);
+			DestroySocketNode(Target);
+		}
+	}
 
 	return (int)msg.wParam;				// return 0; - WINAPI
 }
@@ -235,7 +246,7 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 	
 	switch (uMsg) {
 		case WM_CREATE:
-			hPort = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL | ES_NUMBER, 16, 10, 60, 20, hWnd, (HMENU)IDC_EDPORT, GetModuleHandle(NULL), NULL); 
+			hPort = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 16, 10, 60, 20, hWnd, (HMENU)IDC_EDPORT, GetModuleHandle(NULL), NULL); 
 			SendMessage(hPort, EM_LIMITTEXT, (WPARAM)5, 0);
 
 			BtnWndPosition[0].Width = BtnWndPosition[1].Width = BtnWndPosition[2].Width = 60;
@@ -244,6 +255,7 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 			hBtns[0] = CreateWindow(TEXT("button"), TEXT("Open"), WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON | BS_PUSHBUTTON, 0,0, BtnWndPosition[0].Width, BtnWndPosition[0].Height, hWnd, (HMENU)IDC_BTNOPEN, GetModuleHandle(NULL), NULL);
 			hBtns[1] = CreateWindow(TEXT("button"), TEXT("Close"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 0,0, BtnWndPosition[1].Width, BtnWndPosition[1].Height, hWnd, (HMENU)IDC_BTNCLOSE, GetModuleHandle(NULL), NULL);
 			hBtns[2] = CreateWindow(TEXT("button"), TEXT("Clear"), WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON, 0,0, BtnWndPosition[2].Width, BtnWndPosition[2].Height, hWnd, (HMENU)IDC_BTNCLEAR, GetModuleHandle(NULL), NULL);
+			SetFocus(hPort);
 			return 0;
 
 		case WM_COMMAND:
@@ -256,6 +268,8 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 					/* Server Main Process  */
 					InputArguments.Port = GetDlgItemInt(hWnd, IDC_EDPORT, &bTranslated, FALSE);
 					if(bTranslated && InputArguments.Port >= 0x400 && InputArguments.Port < 0xffff){
+
+						bRunning = TRUE;
 						hServerMainThread = CreateThread(NULL, 0, ServerMain, &InputArguments, 0, &dwServerMainThreadID);
 						if(hServerMainThread == NULL){
 							if(MessageBox(hWnd, TEXT("서버 생성 실패"), TEXT("Warning"),
@@ -264,7 +278,6 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 							}
 						}
 						else{
-							bRunning = TRUE;
 							SetWindowText(GetParent(hWnd), TEXT("Server - 실행중"));
 							ShowText("서버가 실행되었습니다.\r\n[IP = %d(%d)]\r\n", 0x12345678, InputArguments.Port);
 							SetTimer(hWnd, 1, 3600000, NULL);
@@ -278,6 +291,7 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 					/* Server Close */
 					if(bRunning){
 						bRunning = FALSE;
+						PostQueuedCompletionStatus(g_hcp, 1, 0x10000000, NULL);
 						ShowText("서버가 종료되었습니다.\r\n종료 코드 : Close\r\n");
 						SetWindowText(GetParent(hWnd), TEXT("Server"));
 					}
@@ -288,7 +302,9 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 		case WM_TIMER:
 			switch(wParam){
 				case 1:
-					if(!GetExitCodeThread(hServerMainThread, &dwExitCode)){
+					if(WaitForSingleObject(hServerMainThread, 0) == WAIT_TIMEOUT){break;}
+
+					if(GetExitCodeThread(hServerMainThread, &dwExitCode) == FALSE){
 						ShowError("GetExitCodeThread()");
 					}else{
 						if(dwExitCode != STILL_ACTIVE){
@@ -432,14 +448,13 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 	int ret;
 
 	HANDLE hcp = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, 0,0);
+	g_hcp = hcp;
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
-	HANDLE hThread;
+	HANDLE hThread[50] = {0,};
 	
 	for(int i=0; i<(int)si.dwNumberOfProcessors * 2; i++){
-		hThread = CreateThread(NULL, 0, Processing, hcp, 0, NULL);
-		if(hThread == NULL){return -1;}
-		CloseHandle(hThread);
+		hThread[i] = CreateThread(NULL, 0, Processing, hcp, 0, NULL);
 	}
 
 	WSADATA wsa;
@@ -482,7 +497,6 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 
 	struct sockaddr_in Client;
 	SOCKET Client_Socket;
-	SocketInfo *NewSocketInfo = NULL;
 
 	while(bRunning){
 		int cbAddress = sizeof(Client);
@@ -496,11 +510,11 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 		ShowText("\r\n[TCP Server] Client Accept : IP = %s(%d)\r\n", IP, ntohs(Client.sin_port));
 
 		CreateIoCompletionPort((HANDLE)Client_Socket, hcp, 0, 0);
-		NewSocketInfo = CreateSocketInfo(Client_Socket, RECV);
+		SocketInfo* NewSocketInfo = CreateSocketInfo(Client_Socket, RECV);
 				
 		WSABUF wsabuf;
 		wsabuf.buf = NewSocketInfo->buf;
-		wsabuf.len = sizeof(NewSocketInfo->buf)-1;
+		wsabuf.len = BUFSIZE;
 
 		DWORD Flags = 0, cbRecv = 0;
 		ret = WSARecv(Client_Socket, &wsabuf, 1, &cbRecv, &Flags, &NewSocketInfo->ov, NULL);
@@ -521,8 +535,6 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 }
 
 DWORD WINAPI Processing(LPVOID lpArg){
-	if(L == NULL){return -1;}
-
 	int ret;
 	DWORD cbTransferred;
 	SocketInfo* ClientSession;
@@ -531,18 +543,41 @@ DWORD WINAPI Processing(LPVOID lpArg){
 	ULONG_PTR CompletionKey;
 	HANDLE hcp = (HANDLE)lpArg;
 
+	// TODO: 작업 스레드 30개 생성됨, 서버 메인 스레드 정상 종료 유도하고 작업자 스레드 종료
+	TCHAR buf[256];
+	StringCbPrintf(buf, sizeof(buf), TEXT("My Thread ID = %d"), GetCurrentThreadId());
+	MessageBox(HWND_DESKTOP, buf, TEXT("Debug"), MB_OK);
+
 	while(bRunning){
 		// 감시 대상에 대한 이벤트가 발생하면 스레드를 깨운다.
 		// cbTransferred는 WSARecv 함수를 호출할 때 전달한 WSABUF 구조체의 멤버 변수인 len보다 절대 클 수 없다.
-		// TODO: 코드 전체 수정 필요
-		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, (PULONG_PTR)&CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE);
+		// GetLastError() = 87의 원인이 세 번째 인수인 것으로 보이는데 유효하지 않을 경우 항상 발생한다고 보면 된다.
+		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, &CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE);
+
+		// TODO: 커스텀 에러 작성 완료
+		if(CompletionKey == 0x10000000 && ClientSession == NULL){
+			int cnt = GetNodeCount(L);
+			for(int i=0; i<cnt; i++){
+				SocketNode* Target = GetNodeAtLocation(L, 0);
+
+				if(Target != NULL){
+					RemoveSocketNode(&L, Target);
+					DestroySocketNode(Target);
+				}
+			}
+
+			break;
+		}
+
 		if(ClientSession->Connected == FALSE){
 			/*
 				가능성은 희박하나 다중 클라이언트를 이용한 동시 접속이 이뤄질 수 있다.
 				때문에 임계구역에 변수를 밀어넣고 값을 수정하는 것이 좋으나(원자성)
-				값을 수정하는 구간이 해당 분기 외에는 존재하지 않고 소켓 정보를 저장하는
-				자료구조가 연결 리스트 형태이므로 위 경우는 고려하지 않기로 한다.
+				값을 수정하는 구간이 해당 분기 외에는 존재하지 않고 만들어둔 작업 스레드 중
+				대부분은 실제로 실행되지 않고(사실상 하나만 실행됨) 대기상태에 있는
+				경우가 많으므로 소켓 정보를 저장할 때 위 경우는 고려하지 않기로 한다.
 			*/
+
 			ClientSession->Connected = TRUE;
 			CurrentNode = CreateSocketNode(ClientSession);
 
@@ -600,7 +635,6 @@ DWORD WINAPI Processing(LPVOID lpArg){
 			ClientSession->buf[ClientSession->recv] = 0;
 			ShowText("[Addr : %s(%d)] %s\r\n", IP, ntohs(Client.sin_port), ClientSession->buf);
 		}else{
-			/*if(ClientSession->EventType == SEND)*/
 			ClientSession->send += cbTransferred;
 		}
 
@@ -612,8 +646,6 @@ DWORD WINAPI Processing(LPVOID lpArg){
 			wsabuf.len = ClientSession->recv - ClientSession->send;
 
 			DWORD dwSend, dwFlags = 0;
-			// ClientSession->EventType = SEND;
-
 			/* 
 				TODO : 브로드캐스팅 기능을 추가해야 한다.
 				윈속 함수 특성상 한 번에 보내고 받는게 가능하기 때문에
@@ -639,19 +671,11 @@ DWORD WINAPI Processing(LPVOID lpArg){
 						ShowError("WSASend()");
 					}
 					continue;
-				}else{
-					DWORD dwError = GetLastError();
-					TCHAR buf[256];
-					StringCbPrintf(buf, sizeof(buf), TEXT("GetLastError() = %d"), dwError);
-					MessageBox(HWND_DESKTOP, buf, TEXT("Alarm"), MB_OK);
-
 				}
 			}
 		}else{
-			/* recv == send | recv < send */
 			memset(&ClientSession->ov, 0, sizeof(ClientSession->ov));
 			ClientSession->recv = 0;
-			// ClientSession->EventType = RECV;		// 클라이언트 통신을 위한 RECV 이벤트 재등록
 			
 			WSABUF wsabuf;
 			wsabuf.buf = ClientSession->buf;
@@ -803,8 +827,8 @@ SocketInfo* CreateSocketInfo(SOCKET ClientSocket, EVENT_TYPE EventType){
 	SocketInfo* NewSocketInfo = (SocketInfo*)malloc(sizeof(SocketInfo));
 
 	memset(&NewSocketInfo->ov, 0, sizeof(NewSocketInfo->ov));
-	NewSocketInfo->send = NewSocketInfo->recv = 0;
 	NewSocketInfo->sock = ClientSocket;
+	NewSocketInfo->send = NewSocketInfo->recv = 0;
 	NewSocketInfo->EventType = EventType;
 	NewSocketInfo->Connected = FALSE;
 

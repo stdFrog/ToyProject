@@ -583,97 +583,6 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 						if(WaitForSingleObject(hSendEvent, 0) == WAIT_TIMEOUT){
 							SetEvent(hSendEvent);
 						}
-						/*
-
-						// TODO : 연결상태 확인 - MenuItem
-
-						// TODO : 정보 가져오기
-						hMap = OpenFileMapping(FILE_MAP_READ, FALSE, MAPPINGID);
-						if(hMap == NULL){ 
-							dwError = ErrorMessage(ERR(FAILED_LOADSECTION));
-							CloseHandle(hMap);
-							return dwError;
-						}
-
-						rdPtr = (TCHAR*)MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, sizeof(SOCKET*));
-						if(rdPtr == NULL){
-							dwError = ErrorMessage(ERR(FAILED_READSECTION));
-							CloseHandle(hMap);
-							return dwError;
-						}
-
-						memcpy(&sock, rdPtr, sizeof(SOCKET*));
-
-						if(sock != NULL){
-							if(SetEvent(hSendEvent)){
-								// TODO: 함수 호출
-								LengthW = SendMessage(hMsgEdit, WM_GETTEXTLENGTH, 0, 0);
-								bufT = (TCHAR*)malloc(LengthW + 1);
-								SendMessage(hMsgEdit, WM_GETTEXT, LengthW, (LPARAM)bufT);
-
-								LengthA = WideCharToMultiByte(CP_ACP, 0, bufT, -1, NULL, 0, NULL, NULL);
-								if(LengthA == 0){
-									dwError = ErrorMessage(ERR(FAILED_ENCODING));
-									if(bufT){free(bufT);}
-									UnmapViewOfFile(rdPtr);
-									CloseHandle(hMap);
-									CloseHandle(hSendEvent);
-									return dwError;
-								}
-
-								bufA = (char*)malloc(LengthA + sizeof(struct tag_Packet));
-								if(WideCharToMultiByte(CP_ACP, 0, bufT, -1, bufA, LengthA, NULL, NULL) == 0){ 
-									dwError = ErrorMessage(ERR(FAILED_ENCODING));
-									if(bufA){free(bufA);}
-									if(bufT){free(bufT);}
-									UnmapViewOfFile(rdPtr);
-									CloseHandle(hMap);
-									CloseHandle(hSendEvent);
-									return dwError;
-								}
-
-								Header = (struct tag_Packet*)bufA;
-								Header->dwTransferred = LengthA;
-								Header->bEcho = TRUE;
-								wsabuf.buf = bufA;
-								wsabuf.len = LengthA + sizeof(struct tag_Packet);
-
-								dwFlags = 0;
-								memset(&ov, 0, sizeof(ov));
-								if(WSASend(*sock, &wsabuf, 1, &dwSend, dwFlags, &ov, NULL) == SOCKET_ERROR){
-									if(WSAGetLastError() != WSA_IO_PENDING){
-										dwError = WSAErrorMessage(ERRFUNC(WSASend(), FAILED_FUNCTION));
-										if(bufA){free(bufA);}
-										if(bufT){free(bufT);}
-										UnmapViewOfFile(rdPtr);
-										CloseHandle(hMap);
-										CloseHandle(hSendEvent);
-										return dwError;
-									}
-								}
-								// TODO: 데이터 전송 후 MsgEdit 기본 작업
-								SetWindowText(hMsgEdit, TEXT(""));
-							}else{
-								dwError = ErrorMessage(ERRFUNC(SetEvent(), FAILED_FUNCTION));
-								UnmapViewOfFile(rdPtr);
-								CloseHandle(hMap);
-								CloseHandle(hSendEvent);
-								return dwError;
-							}
-						}else{
-							dwError = ErrorMessage(ERR(FAILED_LOADSCOKET));
-							UnmapViewOfFile(rdPtr);
-							CloseHandle(hMap);
-							CloseHandle(hSendEvent);
-							return dwError;
-						}
-
-						if(bufA){free(bufA); bufA = NULL;}
-						if(bufT){free(bufT); bufT = NULL;}
-						CloseHandle(hSendEvent);
-						UnmapViewOfFile(rdPtr);
-						CloseHandle(hMap);
-						*/
 
 						// TODO: 공통 기본 작업
 						SetWindowText(hMsgEdit, TEXT(""));
@@ -782,7 +691,7 @@ INT_PTR CALLBACK DialogProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPar
 
 			SetRect(&srt, 6, 66, 6 + 120, 66 + 18);
 			MapDialogRect(hWnd, &srt);
-			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP, srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
+			hDlgControl[PORTCONTROL] = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), TEXT(""), WS_VISIBLE | WS_CHILD | WS_BORDER | WS_TABSTOP | ES_NUMBER , srt.left, srt.top, srt.right - srt.left, srt.bottom - srt.top, hWnd, (HMENU)IDC_DLGEDPORT, GetModuleHandle(NULL), NULL);
 			SendMessage(hDlgControl[PORTCONTROL], EM_LIMITTEXT, (WPARAM)5, (LPARAM)0);							// Port는 최대 5자리까지만 입력
 
 			SetRect(&srt, 190, 160, 190 + 50, 160 + 18);
@@ -1129,8 +1038,8 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 			continue;
 		}
 
-		Header = (struct tag_Packet*)bufA;
-		Header->dwTransferred = CopyLength;
+		// Header = (struct tag_Packet*)bufA;
+		// Header->dwTransferred = CopyLength;
 		ret = send(sock, bufA, DEFAULT_BUFLEN, 0);
 		if(ret == SOCKET_ERROR){
 			// 오류 발생(SOCKET_ERROR)
