@@ -1,3 +1,9 @@
+/////////////////////////////// List to be modified///////////////////////////////////
+//	1. 포트에 입력되어야 할 텍스트 형식 제한 추가(O)
+//	2. 포트 번호가 잘못 입력되었을 때 출력되는 안내 문구에 개행 추가(O)
+//	3. 클라이언트가 여러 줄의 문자열을 전송할 때 줄 간격 조정
+//////////////////////////////////////////////////////////////////////////////////////
+
 #define _WIN32_WINNT 0x0A00
 #define UNICODE
 
@@ -248,7 +254,7 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 	
 	switch (uMsg) {
 		case WM_CREATE:
-			hPort = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 16, 10, 60, 20, hWnd, (HMENU)IDC_EDPORT, GetModuleHandle(NULL), NULL); 
+			hPort = CreateWindowEx(WS_EX_CLIENTEDGE, TEXT("edit"), NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_NUMBER, 16, 10, 60, 20, hWnd, (HMENU)IDC_EDPORT, GetModuleHandle(NULL), NULL); 
 			SendMessage(hPort, EM_LIMITTEXT, (WPARAM)5, 0);
 
 			BtnWndPosition[0].Width = BtnWndPosition[1].Width = BtnWndPosition[2].Width = 60;
@@ -284,7 +290,7 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 							SetTimer(hWnd, 1, 3600000, NULL);
 						}
 					}else{
-						ShowText("Port number is invalid");
+						ShowText("Port number is invalid\r\n");
 					}
 					break;
 
