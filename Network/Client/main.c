@@ -95,11 +95,6 @@ static struct tag_DlgInOut{
 
 LRESULT CreateCustomDialog(struct tag_CustomDialog Template, HWND hOwner, LPVOID lpArg);
 
-struct tag_Packet{
-	DWORD dwTransferred;
-	BOOL bEcho;
-};
-
 /*	
 	// 전역 변수로 아래와 같이 읽기 전용 문자열을 만들었으나 런타임 시간에 배열 첨자 연산이 추가되고 보안(잘못된 메모리 접근) 위험이 있기 때문에 매크로 상수와 매크로 함수를 이용하기로 한다.
 	// 그리고 여러 래퍼 매크로 함수를 만들 수 있기 때문에 훨씬 편하다.
@@ -542,19 +537,7 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 	static HWND hSendBtn, hEditPannel, hMsgEdit;
 	RECT rt;
 
-	char* bufA;
-	wchar_t* bufW;
-	TCHAR* bufT;
-	int LengthW, LengthA;
-
-	HANDLE hSendEvent, hMap;
-	SOCKET sock;
-	TCHAR* rdPtr;
-	WSABUF wsabuf;
-	DWORD dwError, dwSend, dwFlags;
-	OVERLAPPED ov;
-
-	struct tag_Packet *Header;
+	HANDLE hSendEvent;
 
 	switch(iMessage){
 		case WM_CREATE:
@@ -582,11 +565,19 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 
 						if(WaitForSingleObject(hSendEvent, 0) == WAIT_TIMEOUT){
 							SetEvent(hSendEvent);
+
+							while(WaitForSingleObject(hSendEvent, 0) == WAIT_OBJECT_0){
+								MSG msg;
+								while(PeekMessage(&msg, NULL, 0,0, PM_REMOVE)){
+									TranslateMessage(&msg);
+									DispatchMessage(&msg);
+								}
+							}
+							SetWindowText(hMsgEdit, TEXT(""));
+							SetFocus(hMsgEdit);
 						}
 
-						// TODO: 공통 기본 작업
-						SetWindowText(hMsgEdit, TEXT(""));
-						SetFocus(hMsgEdit);
+						CloseHandle(hSendEvent);
 					}
 					break;
 			}
@@ -594,8 +585,6 @@ LRESULT CALLBACK BtnPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 
 		case WM_DESTROY:
 			if(hSendEvent){CloseHandle(hSendEvent);}
-			if(rdPtr){UnmapViewOfFile(rdPtr);}
-			if(hMap){CloseHandle(hMap);}
 			return 0;
 	}
 
@@ -608,7 +597,6 @@ LRESULT CALLBACK DisplayPannelProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPAR
 
 	BYTE* pData;
 	static BYTE* pBuffer;
-	struct tag_Packet* Header;
 
 	DWORD dwTransferred;
 	BOOL bEcho;
@@ -947,14 +935,10 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 	HWND hDisplayWnd = FindWindowEx(hParent, NULL, TCLASSNAME, NULL);
 	if(hDisplayWnd == NULL){ return ErrorMessage(TEXT("Not Found Wnd Handle")); }
 
-	// hRecvEvent = OpenEvent(MODIFY_EVENT_STATE | SYNCHRONIZE, FALSE, RECVEVENTID);
-	// if(hRecvEvent == NULL){ Exit(ERR(FAILED_LOADEVENT)); }
-
 	hConnectEvent = OpenEvent(SYNCHRONIZE, FALSE, CONNECTEVENTID);
 	if(hConnectEvent == NULL){ return ErrorMessage(ERR(FAILED_CONNECTSOCKET)); }
 
 	char buf[0x400];
-	struct tag_Packet* Header;
 	while(WaitForSingleObject(hConnectEvent, 0) == WAIT_OBJECT_0){
 		ret = recv(sock, buf, DEFAULT_BUFLEN, MSG_WAITALL);
 		if(ret == 0 || ret == SOCKET_ERROR){
@@ -963,8 +947,6 @@ DWORD WINAPI RecvThread(LPVOID lpArg){
 		}
 
 		//TODO: 서버랑 프로토콜 확실히 정할것, 이후 Recv Parse 동작 수행
-		Header = (struct tag_Packet*)buf;
-		int MsgLength = Header->dwTransferred;
 
 		//TODO: 데이터 Parse 후 DisplayWnd에 전달
 	}
@@ -1008,38 +990,36 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 	hSendEvent = OpenEvent(EVENT_MODIFY_STATE | SYNCHRONIZE, FALSE, SENDEVENTID);
 	if(hSendEvent == NULL){ Exit(ERR(FAILED_LOADEVENT)); }
 
-	int Length, ConvertLength, CopyLength, HeaderSize;
+	int Length, ConvertLength, CopyLength;
 	char bufA[DEFAULT_BUFLEN];
 	wchar_t bufW[DEFAULT_BUFLEN];
-
-	struct tag_Packet* Header;
-	HeaderSize = sizeof(struct tag_Packet);
 
 	while(WaitForSingleObject(hConnectEvent, 0) == WAIT_OBJECT_0){
 		WaitForSingleObject(hSendEvent, INFINITE);
 
 		BOOL bUnicode = IsWindowUnicode(hMsgEditWnd);
-		Length = SendMessage(hMsgEditWnd, WM_GETTEXTLENGTH, 0,0);
+		Length = GetWindowTextLength(hMsgEditWnd);
+
 		if(bUnicode){
-			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, DEFAULT_BUFLEN, (LPARAM)bufW);
+			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, Length+1, (LPARAM)bufW);
 			bufW[CopyLength] = 0;
 			ConvertLength = WideCharToMultiByte(CP_ACP, 0, bufW, -1, NULL, 0, NULL, NULL);
-			WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA + HeaderSize, ConvertLength, NULL, NULL);
-			CopyLength = ConvertLength + HeaderSize;
+			WideCharToMultiByte(CP_ACP, 0, bufW, -1, bufA, ConvertLength, NULL, NULL);
+			CopyLength = ConvertLength;
 		}else{
-			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, Length+1, (LPARAM)(bufA + HeaderSize));
-			CopyLength += 1;	// NULL 포함
+			CopyLength = SendMessage(hMsgEditWnd, WM_GETTEXT, Length+1, (LPARAM)bufA);
 		}
 
 		// 비트맵이나 아이콘일 경우 0
-		if(CopyLength == 1 || CopyLength == HeaderSize){
+		if(CopyLength == 0){
 			ResetEvent(hSendEvent);
 			ErrorMessage(TEXT("It is not a supported format. You can only send text formats."));
 			continue;
 		}
 
-		// Header = (struct tag_Packet*)bufA;
-		// Header->dwTransferred = CopyLength;
+		// 글자 수는 Length와 같다.
+		// 여기서는 고정 길이 버퍼를 사용하나,
+		// 버퍼 앞 부분에 글자 수를 알리는 헤더를 추가하고 Serialize하면 수신측에서 읽어야 할 데이터의 크기를 알 수 있다.
 		ret = send(sock, bufA, DEFAULT_BUFLEN, 0);
 		if(ret == SOCKET_ERROR){
 			// 오류 발생(SOCKET_ERROR)
@@ -1049,7 +1029,6 @@ DWORD WINAPI SendThread(LPVOID lpArg){
 		}
 
 		//TODO: 전송한 데이터를 DisplayWnd에 전달하고 종료
-
 		ResetEvent(hSendEvent);
 	}
 

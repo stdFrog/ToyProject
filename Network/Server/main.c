@@ -16,6 +16,7 @@
 #define IDC_EDSTAT		106
 #define IDC_EDMSG		107
 
+#define EXITEVENTID		TEXT("Local\\ThreadExitEventExample")
 /*
 	클라이언트가 보내는 데이터 구조의 크기와 동일하게 버퍼 크기를 설정해도 되고
 	약 4배 정도의 차이가 나도록 설정해도 된다.
@@ -122,7 +123,7 @@ static Queue* Q;
 static SocketNode* L;
 static CRITICAL_SECTION cs;
 static BOOL bRunning;
-static HWND hEdit;
+static HWND hEdit, g_hParent;
 static HANDLE g_hcp;
 
 int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
@@ -164,6 +165,7 @@ int APIENTRY WinMain(HINSTANCE hInst, HINSTANCE, LPSTR, int nCmdShow){
 
 	if (hWnd == NULL) { return 0; }
 
+	g_hParent = hWnd;
 	ShowWindow(hWnd, nCmdShow);
 
 	MSG msg;
@@ -268,18 +270,17 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 					/* Server Main Process  */
 					InputArguments.Port = GetDlgItemInt(hWnd, IDC_EDPORT, &bTranslated, FALSE);
 					if(bTranslated && InputArguments.Port >= 0x400 && InputArguments.Port < 0xffff){
-
 						bRunning = TRUE;
 						hServerMainThread = CreateThread(NULL, 0, ServerMain, &InputArguments, 0, &dwServerMainThreadID);
 						if(hServerMainThread == NULL){
 							if(MessageBox(hWnd, TEXT("서버 생성 실패"), TEXT("Warning"),
 										MB_ICONWARNING | MB_RETRYCANCEL | MB_DEFBUTTON1) == IDRETRY){
+								bRunning = FALSE;
 								SendMessage(hWnd, WM_COMMAND, wParam, lParam);
-							}
-						}
-						else{
+							}	
+						} else{
 							SetWindowText(GetParent(hWnd), TEXT("Server - 실행중"));
-							ShowText("서버가 실행되었습니다.\r\n[IP = %d(%d)]\r\n", 0x12345678, InputArguments.Port);
+							ShowText("서버가 실행되었습니다.\r\n[IP = %d(%d)]\r\n", "127.0.0.1", InputArguments.Port);
 							SetTimer(hWnd, 1, 3600000, NULL);
 						}
 					}else{
@@ -288,12 +289,9 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 					break;
 
 				case IDC_BTNCLOSE:
-					/* Server Close */
+					//  Server Close, 동기화 객체로 확인하는 것이 좋으나 예시 프로그램이므로 전역 변수 사용
 					if(bRunning){
-						bRunning = FALSE;
 						PostQueuedCompletionStatus(g_hcp, 1, 0x10000000, NULL);
-						ShowText("서버가 종료되었습니다.\r\n종료 코드 : Close\r\n");
-						SetWindowText(GetParent(hWnd), TEXT("Server"));
 					}
 					break;
 			}
@@ -308,12 +306,9 @@ LRESULT CALLBACK PannelProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam){
 						ShowError("GetExitCodeThread()");
 					}else{
 						if(dwExitCode != STILL_ACTIVE){
-							if(bRunning){
-								bRunning = FALSE;
-								/* 코드 분기 처리 세분화해도 좋을듯 */
-								ShowText("서버가 종료되었습니다.\r\n종료 코드 : %d\r\n", dwExitCode);
-								SetWindowText(GetParent(hWnd), TEXT("Server"));
-							}
+							// 단순 스레드 종료 사실만 알림
+							ShowText("서버가 종료되었습니다.\r\n종료 코드 : %d\r\n", dwExitCode);
+							SetWindowText(GetParent(hWnd), TEXT("Server"));
 						}
 					}
 					break;
@@ -442,7 +437,7 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 		return -1;
 	}
 
-	/* 서버 입장에서는 IP가 bind에서 확정되므로 필요하지 않다. */
+	// 서버 입장에서는 IP가 bind에서 확정되므로 필요하지 않다.
 	struct tag_InputArguments arg = *(struct tag_InputArguments*)lpArg;
 	int SERVERPORT = arg.Port;
 	int ret;
@@ -452,11 +447,13 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 	SYSTEM_INFO si;
 	GetSystemInfo(&si);
 	HANDLE hThread[50] = {0,};
+	DWORD dwThreadID[50] = {0,};
 	
 	for(int i=0; i<(int)si.dwNumberOfProcessors * 2; i++){
-		hThread[i] = CreateThread(NULL, 0, Processing, hcp, 0, NULL);
+		hThread[i] = CreateThread(NULL, 0, Processing, hcp, 0, &dwThreadID[i]);
 	}
 
+	// 스레드 내부에서 DLL 호출시 종료 제약이 많이 생긴다.
 	WSADATA wsa;
 	if(WSAStartup(MAKEWORD(2,2), &wsa) != 0){return -1;}
 
@@ -501,10 +498,17 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 	while(bRunning){
 		int cbAddress = sizeof(Client);
 		Client_Socket = accept(sock, (struct sockaddr*)&Client, &cbAddress);
-		if(Client_Socket == INVALID_SOCKET){
-			ShowError("accept()"); break;
-		}
+		if(Client_Socket == INVALID_SOCKET){ ShowError("accept()"); break; }
 
+		// 동기화 객체를 사용하는 것이 좋으나 예시 프로그램이므로 전역 변수 사용
+		if(bRunning == FALSE){
+			for(int i=0; i<si.dwNumberOfProcessors * 2; i++){
+				// CLOSE 버튼 클릭 후 세션 삭제 및 소켓에 대한 입출력 취소 완료 상태
+				TerminateThread(hThread[i], 0);
+			}
+			break;
+		}
+		
 		char IP[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &Client.sin_addr, IP, sizeof(IP));
 		ShowText("\r\n[TCP Server] Client Accept : IP = %s(%d)\r\n", IP, ntohs(Client.sin_port));
@@ -527,6 +531,10 @@ DWORD WINAPI ServerMain(LPVOID lpArg){
 		}
 	}
 
+	for(int i=0; i<si.dwNumberOfProcessors * 2; i++){
+		CloseHandle(hThread[i]);
+	}
+
 	closesocket(sock);
 	WSACleanup();
 
@@ -543,29 +551,28 @@ DWORD WINAPI Processing(LPVOID lpArg){
 	ULONG_PTR CompletionKey;
 	HANDLE hcp = (HANDLE)lpArg;
 
-	// TODO: 작업 스레드 30개 생성됨, 서버 메인 스레드 정상 종료 유도하고 작업자 스레드 종료
-	TCHAR buf[256];
-	StringCbPrintf(buf, sizeof(buf), TEXT("My Thread ID = %d"), GetCurrentThreadId());
-	MessageBox(HWND_DESKTOP, buf, TEXT("Debug"), MB_OK);
-
 	while(bRunning){
 		// 감시 대상에 대한 이벤트가 발생하면 스레드를 깨운다.
 		// cbTransferred는 WSARecv 함수를 호출할 때 전달한 WSABUF 구조체의 멤버 변수인 len보다 절대 클 수 없다.
 		// GetLastError() = 87의 원인이 세 번째 인수인 것으로 보이는데 유효하지 않을 경우 항상 발생한다고 보면 된다.
 		ret = GetQueuedCompletionStatus(hcp, &cbTransferred, &CompletionKey, (LPOVERLAPPED*)&ClientSession, INFINITE);
 
-		// TODO: 커스텀 에러 작성 완료
 		if(CompletionKey == 0x10000000 && ClientSession == NULL){
+			bRunning = FALSE;
+
 			int cnt = GetNodeCount(L);
 			for(int i=0; i<cnt; i++){
 				SocketNode* Target = GetNodeAtLocation(L, 0);
 
+				CancelIoEx((HANDLE)Target->Info->sock, NULL);
 				if(Target != NULL){
 					RemoveSocketNode(&L, Target);
 					DestroySocketNode(Target);
 				}
 			}
 
+			ShowText("서버가 종료되었습니다.\r\n종료 코드 : CLK_CLOSE_BUTTON\r\n");
+			SetWindowText(g_hParent, TEXT("Server"));
 			break;
 		}
 
