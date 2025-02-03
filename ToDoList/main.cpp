@@ -17,8 +17,8 @@
 // 비슷한 예로 DB의 레코드를 떠올릴 수 있는데 실제로 유사하며
 // DB프로그램을 만들 때 많이 사용되었던 컨트롤이다.
 ///////////////////////////////////////////////////////////////////////////////
-// 리스트 뷰 컨트롤은 대상에 대한 2차원적인 정보를 보여주는데에 적합며
-// 98과 NT시절부터 사용되었기 때문에 굉장히 많은 기능을 담고 있다.
+// 리스트 뷰 컨트롤은 대상에 대한 2차원적인 정보를 보여주는데에 적합하며
+// 98과 NT시절부터 사용되었기 때문에 굉장히 많은 기능을 갖고 있다.
 // 사실상 프로그래밍 하기는 가장 어려운 컨트롤이므로 꼭 필요한 기능을 제외하곤
 // 추가하지 않기로 한다.
 ///////////////////////////////// COMMENT /////////////////////////////////////
@@ -211,7 +211,7 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 
 	hMenu		= CreateMenu();
 	hPopupMenu	= CreatePopupMenu();
-	AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupMenu, L"Menu");
+	AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupMenu, L"메뉴(&Menu)");
 	AppendMenu(hPopupMenu, MF_STRING, (UINT_PTR)IDM_MENU, L"보기(&View)");
 	SetMenu(_hWnd, hMenu);
 
@@ -302,3 +302,20 @@ LRESULT MainWindow::OnTimer(WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+// 업데이트 예정
+// TODO: 보기(View) 항목 팝업으로 변경
+// TODO: 메뉴 항목에 캘린더 추가
+// TODO: 리스트뷰 스타일 옵션 메뉴 항목에 추가
+// TODO: 리스트뷰 사이즈 조정 기능(드래그)
+// TODO: 간단히 보기(툴팁) 기능
+// TODO: 자세히 보기(할 일 항목만, 읽기 전용 에디트) 기능
+// TODO: 캘린더(공통 컨트롤 or 커스텀, 팝업 스타일)
+// TODO: 파일 저장 형식 설계
+// TODO: 리스트뷰 목록 파일로 저장
+// TODO: 연결 프로그램 및 전용 파일 형식 제작
+// TODO: 프로그램 종료시 마지막 위치 저장
+// TODO: 미디어 플레이어 추가(=MP3, 공개 라이브러리 활용, 네트워크 연결없이 파일로 저장된 것만)
+
+// 아래 항목은 시각적 디자인 마친 후 추가
+// TODO: 항목별 입력란 설명자 정적 컨트롤 추가
+// TODO: 항목별 입력란 에디트 컨트롤 추가
