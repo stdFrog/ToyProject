@@ -12,10 +12,21 @@
 // C++과 API로 만드는 경우는 거의 없다.
 // 간단한 예시 프로그램이라고는 하지만 직접 사용할 예정이므로 꽤 신경쓸 예정이다.
 ///////////////////////////////// COMMENT /////////////////////////////////////
+// 리스트 뷰 컨트롤은 여러 가지 세부 항목을 가질 수 있으며
+// 하나의 대상을 연속된 정보로 표현할 때 흔히 사용된다.
+// 비슷한 예로 DB의 레코드를 떠올릴 수 있는데 실제로 유사하며
+// DB프로그램을 만들 때 많이 사용되었던 컨트롤이다.
+///////////////////////////////////////////////////////////////////////////////
+// 리스트 뷰 컨트롤은 대상에 대한 2차원적인 정보를 보여주는데에 적합며
+// 98과 NT시절부터 사용되었기 때문에 굉장히 많은 기능을 담고 있다.
+// 사실상 프로그래밍 하기는 가장 어려운 컨트롤이므로 꼭 필요한 기능을 제외하곤
+// 추가하지 않기로 한다.
+///////////////////////////////// COMMENT /////////////////////////////////////
 
 #define _WIN32_WINNT 0x0A00
 //#define UNICODE				// 컴파일 옵션으로 유니코드 문자셋 지정
 #include <windows.h>
+#include <commctrl.h>
 #include <strsafe.h>
 
 template <class DERIVED_TYPE>
@@ -89,12 +100,12 @@ class BaseWindow {
 
 			return ((_hWnd) ? TRUE : FALSE);
 		}
-
 };
 
 class MainWindow : public BaseWindow<MainWindow> {
 	// Window Reserved Message
-    static const int _nMsg = 0x400;
+    static const int _nMsg		= 0x400;
+	static const int IDM_MENU	= 13000;
 
     typedef struct tag_MSGMAP {
         UINT iMessage;
@@ -112,6 +123,12 @@ class MainWindow : public BaseWindow<MainWindow> {
         {WM_DESTROY, &MainWindow::OnDestroy},
     };
 
+	HWND hListView;
+	INITCOMMONCONTROLSEX icex;
+
+	int ListViewWidth;
+	int ListViewHeight;
+
 private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program"; }
     LRESULT OnTimer(WPARAM wParam, LPARAM lParam);
@@ -120,6 +137,9 @@ private:
     LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
     LRESULT OnDestroy(WPARAM wParam, LPARAM lParam);
     // LRESULT OnExitResizeMove(WPARAM wParam, LPARAM lParam);
+
+private:
+	BOOL RegisterHeader(HWND hListView, UINT Mask, int Format, int Width, LPCWSTR HeaderName, int Index);
 
 public:
     MainWindow();
@@ -131,13 +151,17 @@ public:
 // Utility
 #include "MyUtility.h"
 MainWindow::MainWindow() {
-	// DLL 로드할 거 있으면 추가
+	// DLL 초기화
+	icex.dwSize		= sizeof(icex);
+	icex.dwICC		= ICC_WIN95_CLASSES;
+	InitCommonControlsEx(&icex);
 }
 
 MainWindow::~MainWindow() {
 	// DLL 해제
 }
 
+// MainThread
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     MainWindow win;
 
@@ -167,7 +191,51 @@ LRESULT MainWindow::Handler(UINT iMessage, WPARAM wParam, LPARAM lParam) {
     return DefWindowProc(_hWnd, iMessage, wParam, lParam);
 }
 
+// Native Function
+BOOL MainWindow::RegisterHeader(HWND hListView, UINT Mask, int Format, int Width, LPCWSTR HeaderName, int Index){
+	LVCOLUMN Column;
+
+	Column.mask		= Mask;
+	Column.fmt		= Format;
+	Column.cx		= Width;
+	Column.pszText	= (LPWSTR)HeaderName;
+	Column.iSubItem = Index;
+	SendMessage(hListView, LVM_INSERTCOLUMN, Index, (LPARAM)&Column);
+
+	return TRUE;
+}
+
+// Windows Message
 LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
+	HMENU hMenu, hPopupMenu;
+
+	hMenu		= CreateMenu();
+	hPopupMenu	= CreatePopupMenu();
+	AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupMenu, L"Menu");
+	AppendMenu(hPopupMenu, MF_STRING, (UINT_PTR)IDM_MENU, L"보기(&View)");
+	SetMenu(_hWnd, hMenu);
+
+	hListView	= CreateWindow(
+			WC_LISTVIEW,
+			NULL,
+			WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT,
+			0,0,0,0,
+			_hWnd,
+			NULL,
+			GetModuleHandle(NULL),
+			NULL
+	);
+
+	ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_CHECKBOXES | LVS_EX_HEADERDRAGDROP);
+
+	int nItems		= 4;
+	int CellWidth	= ListViewWidth / nItems;
+
+	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"우선순위", 0);
+	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"구분", 1);
+	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"날짜", 2);
+	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"할 일", 3);
+
     return 0;
 }
 
@@ -177,8 +245,27 @@ LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
 }
 
 LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
-    if (wParam != SIZE_MINIMIZED) {
+	DWORD dwStyle, dwExStyle;
+	RECT srt, crt, wrt;
 
+    if (wParam != SIZE_MINIMIZED) {
+		GetClientRect(_hWnd, &crt);
+		InflateRect(
+				&crt, 
+				(-((crt.right - crt.left) * 0.2f)),
+				(-((crt.bottom - crt.top) * 0.15f))
+		);
+
+		dwStyle		= GetWindowLongPtr(_hWnd, GWL_STYLE);
+		dwExStyle	= GetWindowLongPtr(_hWnd, GWL_EXSTYLE);
+
+		AdjustWindowRectEx(&crt, dwStyle, GetMenu(_hWnd) != NULL, dwExStyle);
+		if(dwStyle & WS_VSCROLL){ crt.right += GetSystemMetrics(SM_CXVSCROLL); }
+		if(dwStyle & WS_HSCROLL){ crt.bottom += GetSystemMetrics(SM_CYHSCROLL); }
+
+		SetWindowPos(hListView, NULL, 10, 10, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
+		ListViewWidth	= crt.right - crt.left;
+		ListViewHeight	= crt.bottom - crt.top;
     }
 
     return 0;
