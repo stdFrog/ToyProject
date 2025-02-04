@@ -75,7 +75,7 @@ class BaseWindow {
 					sizeof(wcex),
 					CS_HREDRAW | CS_VREDRAW,
 					DERIVED_TYPE::WndProc,
-					0,0,
+					0, 0,
 					GetModuleHandle(NULL),
 					NULL, LoadCursor(NULL, IDC_ARROW),
 					(HBRUSH)(COLOR_WINDOW + 1),
@@ -105,7 +105,7 @@ class BaseWindow {
 class MainWindow : public BaseWindow<MainWindow> {
 	// Window Reserved Message
     static const int _nMsg		= 0x400;
-	static const int IDM_MENU	= 13000;
+	static BOOL CheckBox, GridLine, RowSelect, DragDrop;
 
     typedef struct tag_MSGMAP {
         UINT iMessage;
@@ -116,8 +116,12 @@ class MainWindow : public BaseWindow<MainWindow> {
     MSGMAP MainMsg[_nMsg] = {
         {WM_TIMER, &MainWindow::OnTimer},
         {WM_PAINT, &MainWindow::OnPaint},
-        {WM_DISPLAYCHANGE, &MainWindow::OnPaint},				// 해상도 고려해서 출력 : 추가예정
+        {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
         {WM_SIZE, &MainWindow::OnSize},
+        {WM_INITMENU, &MainWindow::OnInitMenu},
+        {WM_INITMENUPOPUP, &MainWindow::OnInitMenuPopup},				// 각 팝업마다 활성시 매번 개별적으로 메시지 전달
+        {WM_COMMAND, &MainWindow::OnCommand},
+        {WM_NOTIFY, &MainWindow::OnNotify},
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
         {WM_CREATE, &MainWindow::OnCreate},
         {WM_DESTROY, &MainWindow::OnDestroy},
@@ -125,6 +129,7 @@ class MainWindow : public BaseWindow<MainWindow> {
 
 	HWND hListView;
 	INITCOMMONCONTROLSEX icex;
+	HMENU hMenu, hPopupMenu, hPopupView;
 
 	int ListViewWidth;
 	int ListViewHeight;
@@ -136,6 +141,11 @@ private:
     LRESULT OnSize(WPARAM wParam, LPARAM lParam);
     LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
     LRESULT OnDestroy(WPARAM wParam, LPARAM lParam);
+	LRESULT OnInitMenu(WPARAM wParam, LPARAM lParam);
+	LRESULT OnInitMenuPopup(WPARAM wParam, LPARAM lParam);
+	LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
+	LRESULT OnNotify(WPARAM wParam, LPARAM lParam);
+
     // LRESULT OnExitResizeMove(WPARAM wParam, LPARAM lParam);
 
 private:
@@ -147,6 +157,11 @@ public:
 
     LRESULT Handler(UINT iMessage, WPARAM wParam, LPARAM lParam);
 };
+
+BOOL MainWindow::CheckBox = FALSE,
+	 MainWindow::GridLine = FALSE,
+	 MainWindow::RowSelect = FALSE,
+	 MainWindow::DragDrop = FALSE;
 
 // Utility
 #include "MyUtility.h"
@@ -206,13 +221,69 @@ BOOL MainWindow::RegisterHeader(HWND hListView, UINT Mask, int Format, int Width
 }
 
 // Windows Message
-LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
-	HMENU hMenu, hPopupMenu;
+#define ID_VIEW_CHECKBOX	13100
+#define ID_VIEW_GRIDLINE	13101
+#define ID_VIEW_ROWSELECT	13102
+#define ID_VIEW_DRAGDROP	13103
 
+LRESULT MainWindow::OnInitMenu(WPARAM wParam, LPARAM lParam){
+	// 각 메뉴가 활성화 될 때 딱 한번만 전달
+	// 한 군데서 관리하는 것이 편하므로 가급적 위 메시지만 사용
+	((CheckBox) ? CheckMenuItem(GetSubMenu((HMENU)wParam, 0), ID_VIEW_CHECKBOX, MF_BYCOMMAND | MF_CHECKED) : CheckMenuItem(GetSubMenu((HMENU)wParam,0), ID_VIEW_CHECKBOX, MF_BYCOMMAND | MF_UNCHECKED));
+	((GridLine) ? CheckMenuItem(GetSubMenu((HMENU)wParam, 0), ID_VIEW_GRIDLINE, MF_BYCOMMAND | MF_CHECKED) : CheckMenuItem(GetSubMenu((HMENU)wParam,0), ID_VIEW_GRIDLINE, MF_BYCOMMAND | MF_UNCHECKED));
+	((RowSelect) ? CheckMenuItem(GetSubMenu((HMENU)wParam,0), ID_VIEW_ROWSELECT, MF_BYCOMMAND | MF_CHECKED) : CheckMenuItem(GetSubMenu((HMENU)wParam,0), ID_VIEW_ROWSELECT, MF_BYCOMMAND | MF_UNCHECKED));
+	((DragDrop) ? CheckMenuItem(GetSubMenu((HMENU)wParam, 0), ID_VIEW_DRAGDROP, MF_BYCOMMAND | MF_CHECKED) : CheckMenuItem(GetSubMenu((HMENU)wParam,0), ID_VIEW_DRAGDROP, MF_BYCOMMAND | MF_UNCHECKED));
+
+	return 0;
+}
+
+LRESULT MainWindow::OnInitMenuPopup(WPARAM wParam, LPARAM lParam){
+	return (DefWindowProc(_hWnd, WM_INITMENUPOPUP, wParam, lParam));
+}
+
+LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
+	// 리스트 뷰의 보기 스타일 자체는 윈도우 스타일이나,
+	// 리스트 뷰의 확장 스타일은 정해진 함수나 메시지를 이용하여야 한다.
+	// 비트 수가 모자랄 정도로 많은 확장 스타일을 지원하므로 마스크 값을 알고 있는게 아니라면 함수를 활용해야 한다.
+	DWORD dwExListViewStyle = ListView_GetExtendedListViewStyle(hListView); 
+
+	switch(LOWORD(wParam)){
+		case ID_VIEW_CHECKBOX:
+			CheckBox	= !CheckBox;
+			dwExListViewStyle = ((CheckBox) ? (DWORD)(DWORD_PTR)(dwExListViewStyle | LVS_EX_CHECKBOXES) : (DWORD)(DWORD_PTR)(dwExListViewStyle & ~LVS_EX_CHECKBOXES));
+			break;
+		case ID_VIEW_GRIDLINE:
+			GridLine	= !GridLine;
+			dwExListViewStyle = ((GridLine) ? (DWORD)(DWORD_PTR)(dwExListViewStyle | LVS_EX_GRIDLINES) : (DWORD)(DWORD_PTR)(dwExListViewStyle & ~LVS_EX_GRIDLINES));
+			break;
+		case ID_VIEW_ROWSELECT:
+			RowSelect	= !RowSelect;
+			dwExListViewStyle = ((RowSelect) ? (DWORD)(DWORD_PTR)(dwExListViewStyle | LVS_EX_FULLROWSELECT) : (DWORD)(DWORD_PTR)(dwExListViewStyle & ~LVS_EX_FULLROWSELECT));
+			break;
+		case ID_VIEW_DRAGDROP:
+			DragDrop	= !DragDrop;
+			dwExListViewStyle = ((DragDrop) ? (DWORD)(DWORD_PTR)(dwExListViewStyle | LVS_EX_HEADERDRAGDROP) : (DWORD)(DWORD_PTR)(dwExListViewStyle & ~LVS_EX_HEADERDRAGDROP));
+			break;
+	}
+
+	ListView_SetExtendedListViewStyle(hListView, dwExListViewStyle);
+	return 0;
+}
+
+LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
+	return DefWindowProc(_hWnd, WM_NOTIFY, wParam, lParam);
+}
+
+LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	hMenu		= CreateMenu();
 	hPopupMenu	= CreatePopupMenu();
+	hPopupView	= CreatePopupMenu();
 	AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupMenu, L"메뉴(&Menu)");
-	AppendMenu(hPopupMenu, MF_STRING, (UINT_PTR)IDM_MENU, L"보기(&View)");
+	AppendMenu(hPopupMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupView, L"보기(&View)");
+	AppendMenu(hPopupView, MF_STRING, ID_VIEW_CHECKBOX, L"체크 박스(&C)");
+	AppendMenu(hPopupView, MF_STRING, ID_VIEW_GRIDLINE, L"격자 줄선(&G)");
+	AppendMenu(hPopupView, MF_STRING, ID_VIEW_ROWSELECT, L"행 전체 선택(&R)");
+	AppendMenu(hPopupView, MF_STRING, ID_VIEW_DRAGDROP, L"세부항목 이동(&D)");
 	SetMenu(_hWnd, hMenu);
 
 	hListView	= CreateWindow(
@@ -227,6 +298,7 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	);
 
 	ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_CHECKBOXES | LVS_EX_HEADERDRAGDROP);
+	CheckBox = GridLine = RowSelect = DragDrop = TRUE;
 
 	int nItems		= 4;
 	int CellWidth	= ListViewWidth / nItems;
@@ -301,21 +373,3 @@ LRESULT MainWindow::OnTimer(WPARAM wParam, LPARAM lParam) {
     */
     return 0;
 }
-
-// 업데이트 예정
-// TODO: 보기(View) 항목 팝업으로 변경
-// TODO: 메뉴 항목에 캘린더 추가
-// TODO: 리스트뷰 스타일 옵션 메뉴 항목에 추가
-// TODO: 리스트뷰 사이즈 조정 기능(드래그)
-// TODO: 간단히 보기(툴팁) 기능
-// TODO: 자세히 보기(할 일 항목만, 읽기 전용 에디트) 기능
-// TODO: 캘린더(공통 컨트롤 or 커스텀, 팝업 스타일)
-// TODO: 파일 저장 형식 설계
-// TODO: 리스트뷰 목록 파일로 저장
-// TODO: 연결 프로그램 및 전용 파일 형식 제작
-// TODO: 프로그램 종료시 마지막 위치 저장
-// TODO: 미디어 플레이어 추가(=MP3, 공개 라이브러리 활용, 네트워크 연결없이 파일로 저장된 것만)
-
-// 아래 항목은 시각적 디자인 마친 후 추가
-// TODO: 항목별 입력란 설명자 정적 컨트롤 추가
-// TODO: 항목별 입력란 에디트 컨트롤 추가
