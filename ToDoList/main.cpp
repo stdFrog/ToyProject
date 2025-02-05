@@ -29,6 +29,15 @@
 #include <commctrl.h>
 #include <strsafe.h>
 
+#define ID_VIEW_CHECKBOX	13100
+#define ID_VIEW_GRIDLINE	13101
+#define ID_VIEW_ROWSELECT	13102
+#define ID_VIEW_DRAGDROP	13103
+
+#define ID_MENU_CALENDAR	13001
+#define IDC_COMBOBOX		100
+
+// Encapsulation
 template <class DERIVED_TYPE>
 class BaseWindow {
 	protected:
@@ -102,6 +111,238 @@ class BaseWindow {
 		}
 };
 
+// PopupWindow
+class PopupWindow : public BaseWindow<PopupWindow> {
+	// Window Reserved Message
+    static const int _nMsg		= 0x400;
+
+    typedef struct tag_MSGMAP {
+        UINT iMessage;
+        LRESULT(PopupWindow::* lpfnWndProc)(WPARAM, LPARAM);
+    }MSGMAP;
+
+    // QUERYENDSESSION
+    MSGMAP MainMsg[_nMsg] = {
+        {WM_PAINT, &PopupWindow::OnPaint},
+        // {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
+        {WM_MEASUREITEM, &PopupWindow::OnMeasureItem},
+        {WM_DRAWITEM, &PopupWindow::OnDrawItem},
+        {WM_CREATE, &PopupWindow::OnCreate},
+        {WM_DESTROY, &PopupWindow::OnDestroy},
+    };
+
+	HWND hComboBox;
+
+private:
+    LPCWSTR ClassName() const { return L"Example ToDoList Windows Program SubWindow Calendar"; }
+    LRESULT OnPaint(WPARAM wParam, LPARAM lParam);
+    LRESULT OnMeasureItem(WPARAM wParam, LPARAM lParam);
+    LRESULT OnDrawItem(WPARAM wParam, LPARAM lParam);
+    LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
+    LRESULT OnDestroy(WPARAM wParam, LPARAM lParam);
+
+public:
+	PopupWindow();
+    ~PopupWindow();
+
+    LRESULT Handler(UINT iMessage, WPARAM wParam, LPARAM lParam);
+};
+
+// PopupWindow Init
+PopupWindow::PopupWindow(){
+	// 생성 및 초기화
+}
+
+PopupWindow::~PopupWindow(){
+	// 삭제 및 해제
+}
+
+// PopupWindow Message
+LRESULT PopupWindow::Handler(UINT iMessage, WPARAM wParam, LPARAM lParam){
+	DWORD i;
+
+    for(i=0; i<sizeof(MainMsg) / sizeof(MainMsg[0]); i++) {
+        if (MainMsg[i].iMessage == iMessage) {
+            return (this->*MainMsg[i].lpfnWndProc)(wParam, lParam);
+        }
+    }
+
+    return DefWindowProc(_hWnd, iMessage, wParam, lParam);
+}
+
+LRESULT PopupWindow::OnMeasureItem(WPARAM wParam, LPARAM lParam){
+	LPMEASUREITEMSTRUCT lpmis = (LPMEASUREITEMSTRUCT)lParam;
+	lpmis->itemHeight = GetSystemMetrics(SM_CYVSCROLL);
+	return TRUE;
+}
+
+LRESULT PopupWindow::OnDrawItem(WPARAM wParam, LPARAM lParam){
+	LPDRAWITEMSTRUCT lpdis = (LPDRAWITEMSTRUCT)lParam;
+	WCHAR DatePickerItem[256];
+
+	int x,y;
+	SIZE TextSize;
+
+	switch(lpdis->CtlID){
+		case IDC_COMBOBOX:
+			// 콤보 박스에 아이템이 없으면 -1이며, 보통 컨트롤이 포커스를 가졌을 때이다.
+			if(lpdis->itemID == -1){
+				SYSTEMTIME st;
+				GetLocalTime(&st);
+				int Year	= st.wYear,
+					Month	= st.wMonth;
+
+				StringCbPrintf(DatePickerItem, sizeof(DatePickerItem), L"%d년 - %d월", Year, Month);
+				GetTextExtentPoint32(lpdis->hDC, DatePickerItem, wcslen(DatePickerItem), &TextSize);
+				x = (lpdis->rcItem.right - lpdis->rcItem.left - TextSize.cx) / 2;
+				y = (lpdis->rcItem.bottom - lpdis->rcItem.top - TextSize.cy) / 2;
+				TextOut(lpdis->hDC, lpdis->rcItem.left + x, lpdis->rcItem.top + y, DatePickerItem, wcslen(DatePickerItem));
+			}else if(lpdis->itemID >= 0){
+				// 콤보 박스에 아이템이 있으면 인덱스 값을 가진다
+				SetBkColor(lpdis->hDC, GetSysColor(COLOR_WINDOW));
+				SetTextColor(lpdis->hDC, GetSysColor(COLOR_WINDOWTEXT));
+				FillRect(lpdis->hDC, &lpdis->rcItem, (HBRUSH)(COLOR_WINDOW+1));
+
+				if(lpdis->itemAction & (ODA_DRAWENTIRE | ODA_SELECT)){
+					SendMessage(hComboBox, CB_GETLBTEXT, (WPARAM)lpdis->itemID, (LPARAM)DatePickerItem);
+					GetTextExtentPoint32(lpdis->hDC, DatePickerItem, wcslen(DatePickerItem), &TextSize);
+					x = (lpdis->rcItem.right - lpdis->rcItem.left - TextSize.cx) / 2;
+					y = (lpdis->rcItem.bottom - lpdis->rcItem.top - TextSize.cy) / 2;
+					TextOut(lpdis->hDC, lpdis->rcItem.left + x, lpdis->rcItem.top + y, DatePickerItem, wcslen(DatePickerItem));
+				}else if(lpdis->itemAction & (ODA_DRAWENTIRE | ODA_FOCUS)){
+					HPEN	hOldPen,
+							hPen		= CreatePen(PS_DOT, 1, RGB(0,255,0));
+					HBRUSH	hOldBrush	= (HBRUSH)SelectObject(lpdis->hDC, GetStockObject(NULL_BRUSH));
+							hOldPen		= (HPEN)SelectObject(lpdis->hDC, hPen);
+
+					Rectangle(lpdis->hDC, lpdis->rcItem.left, lpdis->rcItem.top, lpdis->rcItem.right, lpdis->rcItem.bottom);
+
+					SendMessage(hComboBox, CB_GETLBTEXT, (WPARAM)lpdis->itemID, (LPARAM)DatePickerItem);
+					GetTextExtentPoint32(lpdis->hDC, DatePickerItem, wcslen(DatePickerItem), &TextSize);
+					x = (lpdis->rcItem.right - lpdis->rcItem.left - TextSize.cx) / 2;
+					y = (lpdis->rcItem.bottom - lpdis->rcItem.top - TextSize.cy) / 2;
+					TextOut(lpdis->hDC, lpdis->rcItem.left + x, lpdis->rcItem.top + y, DatePickerItem, wcslen(DatePickerItem));
+
+					SelectObject(lpdis->hDC, hOldPen);
+					SelectObject(lpdis->hDC, hOldBrush);
+
+					DeleteObject(hPen);
+				}
+			}
+			break;
+
+	}
+
+	return TRUE;
+}
+
+LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
+	PAINTSTRUCT ps;
+	HDC hdc = BeginPaint(_hWnd, &ps);
+	
+	// PopupWindow의 작업영역 내에서 콤보박스 위치
+	RECT PopupWindowRect, ComboBoxRect;
+	GetWindowRect(hComboBox, &ComboBoxRect);
+	ScreenToClient(_hWnd, (LPPOINT)&ComboBoxRect);
+	ScreenToClient(_hWnd, (LPPOINT)&ComboBoxRect+1);
+
+	// PopupWindow의 작업영역 크기
+	GetClientRect(_hWnd, &PopupWindowRect);
+
+	// 비트맵 생성
+	static RECT BitmapRect;
+	static HBITMAP hBitmap;
+
+	HDC hMemDC		= CreateCompatibleDC(hdc);
+	if(hBitmap == NULL){
+		int BitmapWidth		= PopupWindowRect.right;
+		int BitmapHeight	= PopupWindowRect.bottom - ComboBoxRect.bottom;
+		hBitmap				= CreateCompatibleBitmap(hdc, BitmapWidth, BitmapHeight);
+
+		// hMemDC가 내부 설정 고려
+		SetRect(&BitmapRect, 0, 0, BitmapWidth, BitmapHeight);
+	}
+	HGDIOBJ hOld	= SelectObject(hMemDC, hBitmap);
+	// COMMENT:	hMemDC는 선택된 리소스에 따라 적절한 정보를 유지/관리하는데
+	//			지금처럼 DC에 비트맵을 선택하면(=교체, 끼워넣음) 내부적으로 DC가 관리하는 화면 영역을 비트맵 좌상단에 맞추는 것으로 보인다.
+	FillRect(hMemDC, &BitmapRect, GetSysColorBrush(COLOR_WINDOW));
+
+	// TODO: 달력 그리기
+
+
+	// Debug : 문자열의 좌상단 좌표를 0,0으로 맞췄을 때 비트맵의 좌상단(0,0)에 출력된다.
+	{
+		WCHAR buf[256];
+		StringCbPrintf(buf, sizeof(buf), L"ComboBox Client Rect = (%d,%d,%d,%d)", ComboBoxRect.left, ComboBoxRect.top, ComboBoxRect.right, ComboBoxRect.bottom);
+		// TextOut(hMemDC, 0,0, buf, wcslen(buf));
+	}
+
+	// 출력 위치 설정
+	BITMAP bmp;
+	GetObject(hBitmap, sizeof(BITMAP), &bmp);
+	BitBlt(hdc, 0, ComboBoxRect.bottom, bmp.bmWidth, bmp.bmHeight, hMemDC, 0,0, SRCCOPY);
+
+	// 리소스 정리
+	SelectObject(hMemDC, hOld);
+	DeleteDC(hMemDC);
+
+	EndPaint(_hWnd, &ps);
+	return 0;
+}
+
+LRESULT PopupWindow::OnCreate(WPARAM wParam, LPARAM lParam){
+	RECT crt, wrt, ort, srt;
+	HWND hParent = GetParent(_hWnd);
+
+	GetWindowRect(hParent, &ort);
+	int OwnerWidth	= ort.right - ort.left;
+	int OwnerHeight	= ort.bottom - ort.top;
+	
+	DWORD dwStyle	= GetWindowLongPtr(_hWnd, GWL_STYLE);
+	DWORD dwExStyle	= GetWindowLongPtr(_hWnd, GWL_EXSTYLE);
+
+	SetRect(&srt, 0, 0, OwnerWidth / 2, OwnerHeight / 2);
+	AdjustWindowRectEx(&srt, dwStyle, GetMenu(_hWnd) != NULL, dwExStyle);
+	if(dwStyle & WS_VSCROLL){ srt.right += GetSystemMetrics(SM_CXVSCROLL); }
+	if(dwStyle & WS_HSCROLL){ srt.bottom += GetSystemMetrics(SM_CYHSCROLL); }
+
+	int CalendarWidth	= srt.right - srt.left;
+	int CalendarHeight	= srt.bottom - srt.top;
+	SetRect(&crt, ort.left + (OwnerWidth - CalendarWidth) / 2, ort.top + (OwnerHeight - CalendarHeight) / 2, CalendarWidth, CalendarHeight);
+	SetWindowPos(_hWnd, NULL, crt.left, crt.top, crt.right, crt.bottom, SWP_NOZORDER);
+
+	int ComboBoxButtonWidth		= GetSystemMetrics(SM_CXVSCROLL);
+	int ComboBoxButtonHeight	= GetSystemMetrics(SM_CYVSCROLL);
+
+	GetClientRect(_hWnd, &crt);
+	SetRect(&srt, crt.left + ComboBoxButtonWidth, crt.top + ComboBoxButtonHeight, (crt.right - crt.left) - ComboBoxButtonWidth * 2, (crt.bottom - crt.top) - ComboBoxButtonHeight);
+	hComboBox = CreateWindow(L"combobox", NULL, WS_CHILD | WS_VISIBLE | WS_VSCROLL | CBS_OWNERDRAWFIXED | CBS_DROPDOWNLIST | CBS_HASSTRINGS, 0,0,0,0, _hWnd, (HMENU)IDC_COMBOBOX, GetModuleHandle(NULL), NULL);
+	SetWindowPos(hComboBox, NULL, srt.left, srt.top, srt.right, srt.bottom, SWP_NOZORDER);
+
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	int Year	= st.wYear,
+		Month	= st.wMonth,
+		Day		= st.wDay;
+
+	int YearRange	= 5,
+		MonthRange	= 12;
+
+	TCHAR DatePickerItem[256];
+	for(int i=0; i<YearRange * 2; i++){
+		for(int j=1; j<=MonthRange; j++){
+			StringCbPrintf(DatePickerItem, sizeof(DatePickerItem), L"%d년 - %d월", (Year - YearRange)+ i, j);
+			SendDlgItemMessage(_hWnd, IDC_COMBOBOX, CB_ADDSTRING, 0, (LPARAM)DatePickerItem);
+		}
+	}
+	return 0;
+}
+
+LRESULT PopupWindow::OnDestroy(WPARAM wParam, LPARAM lParam){
+	return 0;
+}
+
+// MainWindow
 class MainWindow : public BaseWindow<MainWindow> {
 	// Window Reserved Message
     static const int _nMsg		= 0x400;
@@ -122,17 +363,22 @@ class MainWindow : public BaseWindow<MainWindow> {
         {WM_INITMENUPOPUP, &MainWindow::OnInitMenuPopup},				// 각 팝업마다 활성시 매번 개별적으로 메시지 전달
         {WM_COMMAND, &MainWindow::OnCommand},
         {WM_NOTIFY, &MainWindow::OnNotify},
+		{WM_LBUTTONDOWN, &MainWindow::OnLButtonDown},
+		{WM_MOUSEMOVE, &MainWindow::OnMouseMove},
+		{WM_LBUTTONUP, &MainWindow::OnLButtonUp},
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
         {WM_CREATE, &MainWindow::OnCreate},
         {WM_DESTROY, &MainWindow::OnDestroy},
     };
 
-	HWND hListView;
+	PopupWindow popwin;
+	HWND hListView, hCalendar;
 	INITCOMMONCONTROLSEX icex;
 	HMENU hMenu, hPopupMenu, hPopupView;
 
 	int ListViewWidth;
 	int ListViewHeight;
+	const int ThickFrame = 3;
 
 private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program"; }
@@ -146,6 +392,10 @@ private:
 	LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
 	LRESULT OnNotify(WPARAM wParam, LPARAM lParam);
 
+	LRESULT OnLButtonDown(WPARAM wParam, LPARAM lParam);
+	LRESULT OnMouseMove(WPARAM wParam, LPARAM lParam);
+	LRESULT OnLButtonUp(WPARAM wParam, LPARAM lParam);
+
     // LRESULT OnExitResizeMove(WPARAM wParam, LPARAM lParam);
 
 private:
@@ -158,13 +408,16 @@ public:
     LRESULT Handler(UINT iMessage, WPARAM wParam, LPARAM lParam);
 };
 
+// Init static var
 BOOL MainWindow::CheckBox = FALSE,
 	 MainWindow::GridLine = FALSE,
 	 MainWindow::RowSelect = FALSE,
 	 MainWindow::DragDrop = FALSE;
 
-// Utility
+// include lib
 #include "MyUtility.h"
+
+// MainWindow Init
 MainWindow::MainWindow() {
 	// DLL 초기화
 	icex.dwSize		= sizeof(icex);
@@ -180,7 +433,7 @@ MainWindow::~MainWindow() {
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     MainWindow win;
 
-    if (!win.Create(L"ToDoList")){ return 0; }
+    if(!win.Create(L"ToDoList", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN)){ return 0; }
 
     ShowWindow(win.Window(), nCmdShow);
 	MyUtility::CenterWindow(win.Window());
@@ -192,18 +445,6 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 	}
 
     return (int)msg.wParam;
-}
-
-LRESULT MainWindow::Handler(UINT iMessage, WPARAM wParam, LPARAM lParam) {
-    DWORD i;
-
-    for(i=0; i<sizeof(MainMsg) / sizeof(MainMsg[0]); i++) {
-        if (MainMsg[i].iMessage == iMessage) {
-            return (this->*MainMsg[i].lpfnWndProc)(wParam, lParam);
-        }
-    }
-
-    return DefWindowProc(_hWnd, iMessage, wParam, lParam);
 }
 
 // Native Function
@@ -220,11 +461,19 @@ BOOL MainWindow::RegisterHeader(HWND hListView, UINT Mask, int Format, int Width
 	return TRUE;
 }
 
-// Windows Message
-#define ID_VIEW_CHECKBOX	13100
-#define ID_VIEW_GRIDLINE	13101
-#define ID_VIEW_ROWSELECT	13102
-#define ID_VIEW_DRAGDROP	13103
+// MainWindow Message
+LRESULT MainWindow::Handler(UINT iMessage, WPARAM wParam, LPARAM lParam) {
+    DWORD i;
+
+    for(i=0; i<sizeof(MainMsg) / sizeof(MainMsg[0]); i++) {
+        if (MainMsg[i].iMessage == iMessage) {
+            return (this->*MainMsg[i].lpfnWndProc)(wParam, lParam);
+        }
+    }
+
+    return DefWindowProc(_hWnd, iMessage, wParam, lParam);
+}
+
 
 LRESULT MainWindow::OnInitMenu(WPARAM wParam, LPARAM lParam){
 	// 각 메뉴가 활성화 될 때 딱 한번만 전달
@@ -248,6 +497,11 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 	DWORD dwExListViewStyle = ListView_GetExtendedListViewStyle(hListView); 
 
 	switch(LOWORD(wParam)){
+		case ID_MENU_CALENDAR:
+			// TODO: 팝업윈도우 생성하고 캘린더 추가
+			if(popwin.Window() != NULL){DestroyWindow(popwin.Window());}
+			popwin.Create(L"Calendar", WS_POPUP | WS_BORDER | WS_SYSMENU | WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_VISIBLE | WS_CLIPCHILDREN, 0,0,0,0,0, _hWnd, NULL);
+			break;
 		case ID_VIEW_CHECKBOX:
 			CheckBox	= !CheckBox;
 			dwExListViewStyle = ((CheckBox) ? (DWORD)(DWORD_PTR)(dwExListViewStyle | LVS_EX_CHECKBOXES) : (DWORD)(DWORD_PTR)(dwExListViewStyle & ~LVS_EX_CHECKBOXES));
@@ -275,10 +529,11 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
-	hMenu		= CreateMenu();
-	hPopupMenu	= CreatePopupMenu();
-	hPopupView	= CreatePopupMenu();
+	hMenu			= CreateMenu();
+	hPopupMenu		= CreatePopupMenu();
+	hPopupView		= CreatePopupMenu();
 	AppendMenu(hMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupMenu, L"메뉴(&Menu)");
+	AppendMenu(hMenu, MF_STRING, ID_MENU_CALENDAR, L"달력(C&alendar)");
 	AppendMenu(hPopupMenu, MF_STRING | MF_POPUP, (UINT_PTR)hPopupView, L"보기(&View)");
 	AppendMenu(hPopupView, MF_STRING, ID_VIEW_CHECKBOX, L"체크 박스(&C)");
 	AppendMenu(hPopupView, MF_STRING, ID_VIEW_GRIDLINE, L"격자 줄선(&G)");
@@ -373,3 +628,20 @@ LRESULT MainWindow::OnTimer(WPARAM wParam, LPARAM lParam) {
     */
     return 0;
 }
+
+// TODO: 캘린더 추가
+
+
+// TODO: 리스트뷰 사이즈 조정 기능 - 컨트롤 및 디자인 끝낸 후 추가 예정
+LRESULT MainWindow::OnLButtonDown(WPARAM wParam, LPARAM lParam){
+	return 0;
+}
+
+LRESULT MainWindow::OnMouseMove(WPARAM wParam, LPARAM lParam){
+	return 0;
+}
+
+LRESULT MainWindow::OnLButtonUp(WPARAM wParam, LPARAM lParam){
+	return 0;
+}
+
