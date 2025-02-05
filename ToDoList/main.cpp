@@ -125,6 +125,7 @@ class PopupWindow : public BaseWindow<PopupWindow> {
     MSGMAP MainMsg[_nMsg] = {
         {WM_PAINT, &PopupWindow::OnPaint},
         // {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
+        {WM_SIZE, &PopupWindow::OnSize},
         {WM_MEASUREITEM, &PopupWindow::OnMeasureItem},
         {WM_DRAWITEM, &PopupWindow::OnDrawItem},
         {WM_CREATE, &PopupWindow::OnCreate},
@@ -132,10 +133,12 @@ class PopupWindow : public BaseWindow<PopupWindow> {
     };
 
 	HWND hComboBox;
+	HBITMAP hBitmap;
 
 private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program SubWindow Calendar"; }
     LRESULT OnPaint(WPARAM wParam, LPARAM lParam);
+    LRESULT OnSize(WPARAM wParam, LPARAM lParam);
     LRESULT OnMeasureItem(WPARAM wParam, LPARAM lParam);
     LRESULT OnDrawItem(WPARAM wParam, LPARAM lParam);
     LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
@@ -236,6 +239,25 @@ LRESULT PopupWindow::OnDrawItem(WPARAM wParam, LPARAM lParam){
 	return TRUE;
 }
 
+LRESULT PopupWindow::OnSize(WPARAM wParam, LPARAM lParam){
+	RECT crt, srt;
+	int ComboBoxButtonWidth		= GetSystemMetrics(SM_CXVSCROLL),
+		ComboBoxButtonHeight	= GetSystemMetrics(SM_CYVSCROLL);
+
+	if(SIZE_MINIMIZED != wParam){
+		GetClientRect(_hWnd, &crt);
+		SetRect(&srt, ComboBoxButtonWidth, ComboBoxButtonHeight, (crt.right - crt.left) - ComboBoxButtonWidth * 2, (crt.bottom - crt.top) - ComboBoxButtonHeight);
+		SetWindowPos(hComboBox, NULL, srt.left, srt.top, srt.right, srt.bottom, SWP_NOZORDER);
+
+		if(hBitmap){
+			DeleteObject(hBitmap);
+			hBitmap = NULL;
+		}
+
+	}
+	return 0;
+}
+
 LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(_hWnd, &ps);
@@ -251,7 +273,6 @@ LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
 
 	// 비트맵 생성
 	static RECT BitmapRect;
-	static HBITMAP hBitmap;
 
 	HDC hMemDC		= CreateCompatibleDC(hdc);
 	if(hBitmap == NULL){
@@ -265,7 +286,7 @@ LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
 	HGDIOBJ hOld	= SelectObject(hMemDC, hBitmap);
 	// COMMENT:	hMemDC는 선택된 리소스에 따라 적절한 정보를 유지/관리하는데
 	//			지금처럼 DC에 비트맵을 선택하면(=교체, 끼워넣음) 내부적으로 DC가 관리하는 화면 영역을 비트맵 좌상단에 맞추는 것으로 보인다.
-	FillRect(hMemDC, &BitmapRect, GetSysColorBrush(COLOR_WINDOW));
+	FillRect(hMemDC, &BitmapRect, GetSysColorBrush(COLOR_BTNFACE));
 
 	// TODO: 달력 그리기
 
@@ -339,6 +360,7 @@ LRESULT PopupWindow::OnCreate(WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT PopupWindow::OnDestroy(WPARAM wParam, LPARAM lParam){
+	if(hBitmap){DeleteObject(hBitmap);}
 	return 0;
 }
 
