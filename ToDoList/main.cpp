@@ -37,6 +37,9 @@
 #define ID_MENU_CALENDAR	13001
 #define IDC_COMBOBOX		100
 
+void CenterWindow(HWND hWnd);
+BOOL CheckLeapYear(int Year);
+
 // Encapsulation
 template <class DERIVED_TYPE>
 class BaseWindow {
@@ -125,6 +128,7 @@ class PopupWindow : public BaseWindow<PopupWindow> {
     MSGMAP MainMsg[_nMsg] = {
         {WM_PAINT, &PopupWindow::OnPaint},
         // {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
+		{WM_COMMAND, &PopupWindow::OnCommand},
         {WM_SIZE, &PopupWindow::OnSize},
         {WM_MEASUREITEM, &PopupWindow::OnMeasureItem},
         {WM_DRAWITEM, &PopupWindow::OnDrawItem},
@@ -136,8 +140,12 @@ class PopupWindow : public BaseWindow<PopupWindow> {
 	HBITMAP hBitmap;
 
 private:
+	void DrawCalendar(HDC hdc, int cx, int cy);
+
+private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program SubWindow Calendar"; }
     LRESULT OnPaint(WPARAM wParam, LPARAM lParam);
+    LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
     LRESULT OnSize(WPARAM wParam, LPARAM lParam);
     LRESULT OnMeasureItem(WPARAM wParam, LPARAM lParam);
     LRESULT OnDrawItem(WPARAM wParam, LPARAM lParam);
@@ -258,6 +266,23 @@ LRESULT PopupWindow::OnSize(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+LRESULT PopupWindow::OnCommand(WPARAM wParam, LPARAM lParam){
+	int Index,
+		Length;
+
+	switch(LOWORD(wParam)){
+		case IDC_COMBOBOX:
+			switch(HIWORD(wParam)){
+				case CBN_SELCHANGE:
+					InvalidateRect(_hWnd, NULL, FALSE);
+					break;
+			}
+			break;
+	}
+
+	return 0;
+}
+
 LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
 	PAINTSTRUCT ps;
 	HDC hdc = BeginPaint(_hWnd, &ps);
@@ -289,7 +314,7 @@ LRESULT PopupWindow::OnPaint(WPARAM wParam, LPARAM lParam){
 	FillRect(hMemDC, &BitmapRect, GetSysColorBrush(COLOR_BTNFACE));
 
 	// TODO: 달력 그리기
-
+	DrawCalendar(hMemDC, BitmapRect.right - BitmapRect.left, BitmapRect.bottom - BitmapRect.top);
 
 	// Debug : 문자열의 좌상단 좌표를 0,0으로 맞췄을 때 비트맵의 좌상단(0,0)에 출력된다.
 	{
@@ -364,6 +389,97 @@ LRESULT PopupWindow::OnDestroy(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
+	static int Days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+	int x = 0,
+		Index,
+		Length,
+		Year,
+		Month,
+		Day,
+		LastDay,
+		DayOfWeek,
+		Div,
+		DivGap;
+
+	BOOL bTrue;
+	RECT CellRect;
+
+	FILETIME ft;
+	SYSTEMTIME st, today;
+	WCHAR buf[256];
+
+	GetLocalTime(&today);
+
+	Index = SendMessage(hComboBox, CB_GETCURSEL, 0,0);
+	if(Index == CB_ERR){
+		Year = today.wYear;
+		Month = today.wMonth;
+	}else{
+		SendMessage(hComboBox, CB_GETLBTEXT, (WPARAM)Index, (LPARAM)buf);
+
+		for(int i=0; buf[i]; i++){
+			if(buf[i] >= '0' && buf[i] <= '9'){
+				x*= 10;
+				x+= buf[i] - '0';
+			}else if(buf[i] == '-'){
+				Year	= x;
+				x		= 0;
+			}
+		}
+
+		Month = x;
+	}
+
+	StringCbPrintf(buf, sizeof(buf), L"Month = %d, Year = %d", Month, Year);
+	TextOut(hdc, 0,0, buf, wcslen(buf));
+
+	if(Month == 2 && CheckLeapYear(Year)){
+		LastDay = 29;
+	}else{
+		LastDay = Days[Month];
+	}
+
+	memset(&st, 0, sizeof(st));
+	st.wYear	= Year;
+	st.wMonth	= Month;
+	st.wDay		= 1;
+	SystemTimeToFileTime(&st, &ft);
+	FileTimeToSystemTime(&ft, &st);
+	
+	DayOfWeek	= st.wDayOfWeek;
+
+	HPEN hPen = CreatePen(PS_DOT, 1, RGB(255,255,255)),
+		 hOldPen = (HPEN)SelectObject(hdc, hPen);
+
+	Div		= 7;
+	DivGap	= cx / Div;
+	for(int i=0; i<Div+1; i++){
+		MoveToEx(hdc, i * DivGap, 0, NULL);
+		LineTo(hdc, i * DivGap, cy);
+	}
+	CellRect.right = DivGap;
+
+	DivGap	= cy / Div;
+	for(int i=0; i<Div+1; i++){
+		MoveToEx(hdc, 0, i * DivGap, NULL);
+		LineTo(hdc, cx, i * DivGap);
+	}
+	CellRect.bottom = DivGap;
+	SelectObject(hdc, hOldPen);
+
+	// TODO: 요일
+	for(Day = 1; Day <= LastDay; Day++){
+
+	}
+
+	// TODO: 일자
+
+	// TODO: 리소스 정리
+	DeleteObject(hPen);
+}
+
 // MainWindow
 class MainWindow : public BaseWindow<MainWindow> {
 	// Window Reserved Message
@@ -436,8 +552,29 @@ BOOL MainWindow::CheckBox = FALSE,
 	 MainWindow::RowSelect = FALSE,
 	 MainWindow::DragDrop = FALSE;
 
-// include lib
-#include "MyUtility.h"
+// Utility
+void CenterWindow(HWND hWnd) {
+	RECT wrt, srt;
+	LONG lWidth, lHeight;
+	POINT NewPosition;
+
+	GetWindowRect(hWnd, &wrt);
+	GetWindowRect(GetDesktopWindow(), &srt);
+
+	lWidth = wrt.right - wrt.left;
+	lHeight = wrt.bottom - wrt.top;
+	NewPosition.x = (srt.right - lWidth) / 2;
+	NewPosition.y = (srt.bottom - lHeight) / 2;
+
+	SetWindowPos(hWnd, NULL, NewPosition.x, NewPosition.y, lWidth, lHeight, SWP_NOZORDER);
+}
+
+BOOL CheckLeapYear(int Year){
+	if(Year % 4 == 0 && Year % 100 != 0){return TRUE;}
+	if(Year % 100 == 0 && Year % 400 == 0){return TRUE;}
+
+	return FALSE;
+}
 
 // MainWindow Init
 MainWindow::MainWindow() {
@@ -458,7 +595,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     if(!win.Create(L"ToDoList", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN)){ return 0; }
 
     ShowWindow(win.Window(), nCmdShow);
-	MyUtility::CenterWindow(win.Window());
+	CenterWindow(win.Window());
 
     MSG msg = { 0 };
     while(GetMessage(&msg, NULL, 0,0)){
@@ -520,7 +657,6 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 
 	switch(LOWORD(wParam)){
 		case ID_MENU_CALENDAR:
-			// TODO: 팝업윈도우 생성하고 캘린더 추가
 			if(popwin.Window() != NULL){DestroyWindow(popwin.Window());}
 			popwin.Create(L"Calendar", WS_POPUP | WS_BORDER | WS_SYSMENU | WS_CAPTION | WS_THICKFRAME | WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_VISIBLE | WS_CLIPCHILDREN, 0,0,0,0,0, _hWnd, NULL);
 			break;
@@ -651,9 +787,6 @@ LRESULT MainWindow::OnTimer(WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-// TODO: 캘린더 추가
-
-
 // TODO: 리스트뷰 사이즈 조정 기능 - 컨트롤 및 디자인 끝낸 후 추가 예정
 LRESULT MainWindow::OnLButtonDown(WPARAM wParam, LPARAM lParam){
 	return 0;
@@ -666,4 +799,5 @@ LRESULT MainWindow::OnMouseMove(WPARAM wParam, LPARAM lParam){
 LRESULT MainWindow::OnLButtonUp(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
+
 
