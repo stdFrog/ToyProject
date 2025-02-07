@@ -128,6 +128,9 @@ class PopupWindow : public BaseWindow<PopupWindow> {
     MSGMAP MainMsg[_nMsg] = {
         {WM_PAINT, &PopupWindow::OnPaint},
         // {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
+		{WM_KEYDOWN, &PopupWindow::OnKeyDown},								// 이 메시지를 처리하거나 창 활성시 포커스를 옮기는 방법으로 변경
+		//{WM_ACTIVATE, &PopupWindow::OnActivate},
+		{WM_MOUSEMOVE, &PopupWindow::OnMouseMove},
 		{WM_COMMAND, &PopupWindow::OnCommand},
         {WM_SIZE, &PopupWindow::OnSize},
         {WM_MEASUREITEM, &PopupWindow::OnMeasureItem},
@@ -145,6 +148,9 @@ private:
 private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program SubWindow Calendar"; }
     LRESULT OnPaint(WPARAM wParam, LPARAM lParam);
+	LRESULT OnKeyDown(WPARAM wParam, LPARAM lParam);
+	//LRESULT OnActivate(WPARAM wParam, LPARAM lParam);
+	LRESULT OnMouseMove(WPARAM wParam, LPARAM lParam);
     LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
     LRESULT OnSize(WPARAM wParam, LPARAM lParam);
     LRESULT OnMeasureItem(WPARAM wParam, LPARAM lParam);
@@ -263,6 +269,41 @@ LRESULT PopupWindow::OnSize(WPARAM wParam, LPARAM lParam){
 		}
 
 	}
+	return 0;
+}
+
+LRESULT PopupWindow::OnKeyDown(WPARAM wParam, LPARAM lParam){
+	WORD VKCode,
+		  KeyFlags,
+		  ScanCode,
+		  RepeatCount;
+
+	BOOL bExtended,
+		 bWasKeyDown,
+		 bKeyReleased;
+
+	// 추후 확장시 사용(모드 변경)
+	VKCode		= LOWORD(wParam);
+	KeyFlags	= HIWORD(lParam);
+	ScanCode	= LOBYTE(KeyFlags);
+	bExtended	= ((KeyFlags&& KF_EXTENDED) == KF_EXTENDED);
+
+	// 확장 키 플래그 있을 시 0xE0이 접두(HIWORD)로 붙는다
+	if(bExtended){ ScanCode = MAKEWORD(ScanCode, 0xE0); }
+
+	bWasKeyDown = ((KeyFlags & KF_REPEAT) == KF_REPEAT);
+	RepeatCount = LOWORD(lParam);
+
+	// 특정 키입력은 리스트 박스로 전달
+	switch(VKCode){
+		case VK_UP:
+		case VK_LEFT:
+		case VK_DOWN:
+		case VK_RIGHT:
+			SendMessage(hComboBox, WM_KEYDOWN, wParam, lParam);
+			break;
+	}
+
 	return 0;
 }
 
@@ -389,10 +430,17 @@ LRESULT PopupWindow::OnDestroy(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+LRESULT PopupWindow::OnMouseMove(WPARAM wParam, LPARAM lParam){
+	InvalidateRect(_hWnd, NULL, FALSE);
+	return 0;
+}
+
 void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
-	static int Days[] = {0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+	static int Days[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+	static CONST WCHAR* DayOfTheWeek[] = { L"Sun", L"Mon", L"Tue", L"Wed", L"Thu", L"Fri", L"Sat" };
 
 	int x = 0,
+		y = 0,
 		Index,
 		Length,
 		Year,
@@ -401,14 +449,17 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 		LastDay,
 		DayOfWeek,
 		Div,
-		DivGap;
+		DivGap,
+		RowGap,
+		ColumnGap;
 
 	BOOL bTrue;
 	RECT CellRect;
+	WCHAR buf[64];
+	SIZE TextSize;
 
 	FILETIME ft;
 	SYSTEMTIME st, today;
-	WCHAR buf[256];
 
 	GetLocalTime(&today);
 
@@ -431,9 +482,6 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 
 		Month = x;
 	}
-
-	StringCbPrintf(buf, sizeof(buf), L"Month = %d, Year = %d", Month, Year);
-	TextOut(hdc, 0,0, buf, wcslen(buf));
 
 	if(Month == 2 && CheckLeapYear(Year)){
 		LastDay = 29;
@@ -469,14 +517,103 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 	CellRect.bottom = DivGap;
 	SelectObject(hdc, hOldPen);
 
-	// TODO: 요일
-	for(Day = 1; Day <= LastDay; Day++){
+	CellRect.left = CellRect.top = 0;
 
+	RowGap		= CellRect.bottom - CellRect.top;
+	ColumnGap	= CellRect.right - CellRect.left;
+
+	#define GET_RED(V)			((BYTE)(((DWORD_PTR)(V)) & 0xff))
+	#define GET_GREEN(V)		((BYTE)(((DWORD_PTR)(((WORD)(V))) >> 8) & 0xff))
+	#define GET_BLUE(V)			((BYTE)(((DWORD_PTR)(V >> 16)) & 0xff))
+	#define SET_RGB(R,G,B)		((COLORREF)(((BYTE)(R) | ((WORD)((BYTE)(G)) << 8)) | (((DWORD)(BYTE)(B)) << 16)))
+
+	// RED
+	#define RUBYRED				0xE0115F
+	#define ROSERED				0xFF033E
+	#define CRIMSONRED			0xDC143C
+	#define VERMILIONRED		0xE34234
+
+	// BLUE
+	#define DEEPSKYBLUE			0x00BFFF
+	#define LIGHTSKYBLUE		0x87CEFA
+	#define LIGHTBLUEMIST		0x9AC0CD
+	#define LIGHTCYANBLUE		0xE0FFFF
+
+	HBRUSH hTodayBrush				= CreateSolidBrush(RGB(224,255,255)),
+		   hOldBrush;
+
+	COLORREF BeginningWeekendColor	= RGB(0,191,255),
+			 HolidayColor			= RGB(255,3,62);
+
+	SetBkMode(hdc, TRANSPARENT);
+
+	WCHAR DayOfTheWeekBuf[32];
+	for(int i=0; i<Div; i++){
+		if(i == 0){ SetTextColor(hdc, HolidayColor); }
+		else if(i == 6){ SetTextColor(hdc, BeginningWeekendColor); }
+		else { SetTextColor(hdc, RGB(0,0,0)); }
+		StringCbPrintf(DayOfTheWeekBuf, sizeof(DayOfTheWeekBuf), L"%s", DayOfTheWeek[i]);
+		GetTextExtentPoint32(hdc, DayOfTheWeekBuf, wcslen(DayOfTheWeekBuf), &TextSize);
+		x = (CellRect.right - CellRect.left - TextSize.cx) / 2;
+		y = (CellRect.bottom - CellRect.top - TextSize.cy) / 2;	
+
+		TextOut(hdc, i * ColumnGap + x, CellRect.left + y, DayOfTheWeekBuf, wcslen(DayOfTheWeekBuf));
 	}
 
-	// TODO: 일자
+	POINT Origin;
+	WCHAR DayBuf[256];
+	int yy				= CellRect.top + RowGap,
+		iRowRadius		= RowGap / 2,
+		iColumnRadius	= ColumnGap / 2;
+	for(Day = 1; Day <= LastDay; Day++){
+		StringCbPrintf(DayBuf, sizeof(DayBuf), L"%d", Day);
+		GetTextExtentPoint32(hdc, DayBuf, wcslen(DayBuf), &TextSize);
+		x = (CellRect.right - CellRect.left - TextSize.cx) / 2;
+		y = (CellRect.bottom - CellRect.top - TextSize.cy) / 2;	
+
+		if(Year == today.wYear && Month == today.wMonth && Day == today.wDay){
+			hOldPen		= (HPEN)SelectObject(hdc, GetStockObject(NULL_PEN));
+			hOldBrush	= (HBRUSH)SelectObject(hdc, hTodayBrush);
+
+			Origin.x	= DayOfWeek * ColumnGap + iColumnRadius;
+			Origin.y	= yy + iRowRadius;
+
+			Ellipse(hdc, Origin.x - iColumnRadius, Origin.y - iRowRadius, Origin.x + iColumnRadius, Origin.y + iRowRadius);
+			SelectObject(hdc, hOldBrush);
+			SelectObject(hdc, hOldPen);
+		}
+
+		if(DayOfWeek == 0){
+			SetTextColor(hdc, HolidayColor);
+		}else if(DayOfWeek == 6){
+			SetTextColor(hdc, BeginningWeekendColor);
+		}else{
+			SetTextColor(hdc, SET_RGB(0,0,0));
+		}
+
+		TextOut(hdc, DayOfWeek * ColumnGap + x, yy + y, DayBuf, wcslen(DayBuf));
+	
+		DayOfWeek++;
+		if(DayOfWeek == 7){
+			DayOfWeek = 0;
+			yy += RowGap;
+		}
+	}
+
+	// TODO: 마우스 트래커
+	POINT Mouse;
+	GetCursorPos(&Mouse);
+	ScreenToClient(_hWnd, &Mouse);
+
+	RECT crt;
+	GetClientRect(_hWnd, &crt);
+	Mouse.y -= (crt.bottom - crt.top) - cy;
+	hOldBrush = (HBRUSH)SelectObject(hdc, GetStockObject(NULL_BRUSH));
+	Ellipse(hdc, Mouse.x - 5, Mouse.y - 5, Mouse. x + 5, Mouse.y + 5);
+	SelectObject(hdc, hOldBrush);
 
 	// TODO: 리소스 정리
+	DeleteObject(hTodayBrush);
 	DeleteObject(hPen);
 }
 
