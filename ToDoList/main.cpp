@@ -467,6 +467,9 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 	if(Index == CB_ERR){
 		Year = today.wYear;
 		Month = today.wMonth;
+		StringCbPrintf(buf, sizeof(buf), L"%d년 - %d월", Year, Month);
+		Index = SendMessage(hComboBox, CB_FINDSTRING, (WPARAM)-1, (LPARAM)buf);
+		SendMessage(hComboBox, CB_SETCURSEL, (WPARAM)Index, (LPARAM)0);
 	}else{
 		SendMessage(hComboBox, CB_GETLBTEXT, (WPARAM)Index, (LPARAM)buf);
 
