@@ -53,16 +53,16 @@
 
 #define IDC_EDPRIORITY		3000
 #define IDC_EDCATEGORY		3001
-#define IDC_EDDATEYEAR		3002
-#define IDC_EDDATEMONTH		3003
-#define IDC_EDDATEDAY		3004
-#define IDC_EDTODO			3005
+#define IDC_EDDATE			3002
+#define IDC_EDTODO			3003
 
-#define WM_CHANGEFOCUS		WM_USER+1
+#define WM_CHANGEFOCUS		WM_USER + 1
 
 void CenterWindow(HWND hWnd);
 BOOL CheckLeapYear(int Year);
-int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParam);
+// BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
+
+int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 // Encapsulation
@@ -152,7 +152,7 @@ class PopupWindow : public BaseWindow<PopupWindow> {
     // QUERYENDSESSION
     MSGMAP MainMsg[_nMsg] = {
         {WM_PAINT, &PopupWindow::OnPaint},
-        // {WM_DISPLAYCHANGE, &MainWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
+        // {WM_DISPLAYCHANGE, &PopupWindow::OnPaint},						// 해상도 고려해서 출력 : 추가예정
 		{WM_KEYDOWN, &PopupWindow::OnKeyDown},								// 이 메시지를 처리하거나 창 활성시 포커스를 옮기는 방법으로 변경
 		//{WM_ACTIVATE, &PopupWindow::OnActivate},
 		{WM_MOUSEMOVE, &PopupWindow::OnMouseMove},
@@ -326,6 +326,10 @@ LRESULT PopupWindow::OnKeyDown(WPARAM wParam, LPARAM lParam){
 		case VK_DOWN:
 		case VK_RIGHT:
 			SendMessage(hComboBox, WM_KEYDOWN, wParam, lParam);
+			break;
+
+		case VK_ESCAPE:
+			DestroyWindow(_hWnd);
 			break;
 	}
 
@@ -650,11 +654,14 @@ void PopupWindow::DrawMouseTracker(HDC hdc){
 class MainWindow : public BaseWindow<MainWindow> {
 	// Window Reserved Message
     static const int _nMsg			= 0x400;
-	static const int nItems			= 4;
-	static const int nEditItems		= 6;
+	static const int nHeaders		= 4;
+	static const int nEditItems		= 4;
+	static const int nStaticItems	= 4;
 	static const int nButtonItems	= 2;
-	static const int nControls		= nEditItems + nButtonItems;
+	static const int nControls		= nStaticItems + nEditItems + nButtonItems;
+	static const WCHAR* HeaderName[nHeaders];
 	static BOOL CheckBox, GridLine, RowSelect, DragDrop;
+
 
     typedef struct tag_MSGMAP {
         UINT iMessage;
@@ -674,6 +681,7 @@ class MainWindow : public BaseWindow<MainWindow> {
 		{WM_LBUTTONDOWN, &MainWindow::OnLButtonDown},
 		{WM_MOUSEMOVE, &MainWindow::OnMouseMove},
 		{WM_LBUTTONUP, &MainWindow::OnLButtonUp},
+		{WM_CTLCOLORSTATIC, &MainWindow::OnCtlColorStatic},
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
 		{WM_CHANGEFOCUS, &MainWindow::OnChangeFocus},
         {WM_CREATE, &MainWindow::OnCreate},
@@ -699,6 +707,7 @@ private:
 	LRESULT OnInitMenuPopup(WPARAM wParam, LPARAM lParam);
 	LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
 	LRESULT OnNotify(WPARAM wParam, LPARAM lParam);
+    LRESULT OnCtlColorStatic(WPARAM wParam, LPARAM lParam);
 
 	LRESULT OnLButtonDown(WPARAM wParam, LPARAM lParam);
 	LRESULT OnMouseMove(WPARAM wParam, LPARAM lParam);
@@ -711,7 +720,7 @@ private:
 
 private:
 	BOOL RegisterHeader(HWND hListView, UINT Mask, int Format, int Width, LPCWSTR HeaderName, int Index);
-	BOOL RegisterItems(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, int nItems, ...);
+	BOOL RegisterItem(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, WCHAR (*InputItems)[256]); 
 
 public:
     MainWindow();
@@ -725,6 +734,13 @@ BOOL MainWindow::CheckBox		= FALSE,
 	 MainWindow::GridLine		= FALSE,
 	 MainWindow::RowSelect		= FALSE,
 	 MainWindow::DragDrop		= FALSE;
+
+const WCHAR* MainWindow::HeaderName[] = {
+	L"우선순위",
+	L"구분",
+	L"날짜",
+	L"할 일"
+};
 
 // Utility
 void CenterWindow(HWND hWnd) {
@@ -794,44 +810,44 @@ BOOL MainWindow::RegisterHeader(HWND hListView, UINT Mask, int Format, int Width
 	return TRUE;
 }
 
-BOOL MainWindow::RegisterItems(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, int nItems, ...){
-	int i=0, idx;
-	va_list	AP;
-	va_start(AP, nItems);
+BOOL MainWindow::RegisterItem(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, WCHAR (*InputItems)[256]){
+	int i		= 0,
+		idx		= 0,
+		Length	= 0;
 
-	LVITEM LI;
-	WCHAR* TextItems[MainWindow::nItems];
-	if(nItems > MainWindow::nItems){return FALSE;}
+	LVITEM	LI;
+	WCHAR	TextItems[nHeaders][256];
 
-	while((TextItems[i++] = va_arg(AP, WCHAR*)) != NULL){;}
+	for(i=0; i<nHeaders; i++){
+		StringCbCopy(TextItems[i], 256, InputItems[i]);
+	}
 
 	DWORD dwStyle		= GetWindowLongPtr(hListView, GWL_STYLE);
 	DWORD dwExLVStle	= ListView_GetExtendedListViewStyle(hListView);
 
+	// 항목 작성시 iSubItem을 지정하지 않으면 등록할 수 없다.
 	if(dwStyle & LVS_SORTASCENDING){
-		LI.mask		= Mask;
+		LI.iItem	= 0;
 		LI.iSubItem	= ColumnIndex;
-		LI.pszText	= (LPWSTR)TextItems[0];
 	}else{
-		LI.mask		= Mask;
 		LI.iItem	= RowIndex;
 		LI.iSubItem	= ColumnIndex;
-		LI.pszText	= (LPWSTR)TextItems[0];
 	}
 
-	if(Mask & LVIF_PARAM){
-		LI.lParam	= (LPARAM)TextItems[0];
+	LI.mask		= Mask;
+	LI.pszText	= (LPWSTR)TextItems[0];
+	if((Mask & LVIF_PARAM) == LVIF_PARAM){
+		// 내부 변수 사용시 스택 해제되면서 데이터 사라짐
+		LI.lParam = (LPARAM)_wtoi(TextItems[0]);
 	}
 
 	idx = ListView_InsertItem(hListView, &LI);
 
 	i = 1;
-	while(i <= (nItems - 1)){
+	while(i <= (nHeaders - 1)){
 		ListView_SetItemText(hListView, idx, ColumnIndex + i, TextItems[i]);
 		i++;
 	}
-
-	va_end(AP);
 
 	return TRUE;
 }
@@ -873,9 +889,9 @@ LRESULT MainWindow::OnChangeFocus(WPARAM wParam, LPARAM lParam){
 	// WPARAM: PREV(0), NEXT(1)
 	switch(OnLShift){
 		case 0:
-			for(int i=0; i<nControls; i++){
+			for(int i=nStaticItems + 0; i<nControls; i++){
 				if(hControls[i] == hPrevFocus){
-					if(i == 0){
+					if(i == nStaticItems + 0){
 						SetFocus(hControls[nControls-1]);
 					}else{
 						SetFocus(hControls[i - 1]);
@@ -885,10 +901,10 @@ LRESULT MainWindow::OnChangeFocus(WPARAM wParam, LPARAM lParam){
 			break;
 
 		case 1:
-			for(int i=0; i<nControls; i++){
+			for(int i=nStaticItems + 0; i<nControls; i++){
 				if(hControls[i] == hPrevFocus){
 					if(i == (nControls-1)){
-						SetFocus(hControls[0]);
+						SetFocus(hControls[nStaticItems + 0]);
 					}else{
 						SetFocus(hControls[i + 1]);
 					}
@@ -898,6 +914,22 @@ LRESULT MainWindow::OnChangeFocus(WPARAM wParam, LPARAM lParam){
 	}
 
 	return 0;
+}
+
+LRESULT MainWindow::OnCtlColorStatic(WPARAM wParam, LPARAM lParam){
+	// HBRUSH hBrush = CreateSolidBrush(RGB(230,230,230));
+	// DWORD CtrlID = GetDlgCtrlID((HWND)lParam);
+
+	for(int i=0; i<nStaticItems; i++){
+		if(hControls[i] == (HWND)lParam){
+			HDC hdc		= (HDC)wParam;
+			SetTextColor(hdc, RGB(0,0,0));
+			SetBkColor(hdc, RGB(255,255,255));
+			return (INT_PTR)GetStockObject(WHITE_BRUSH);
+		}
+	}
+
+	return DefWindowProc(_hWnd, WM_CTLCOLORSTATIC, wParam, lParam);
 }
 
 LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
@@ -1007,6 +1039,13 @@ LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPa
 							}
 						}
 						return 0;
+
+					case VK_RETURN:
+						{
+							HWND hAppend = FindWindowEx(GetParent(hWnd), NULL, L"MySubClassingButton", L"추가");
+							SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWORD(IDC_BTNAPPEND, BN_CLICKED), (LPARAM)hAppend);
+						}
+						return 0;
 				}
 			}
 			break;
@@ -1022,7 +1061,8 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 	// 리스트 뷰의 보기 스타일 자체는 윈도우 스타일이나,
 	// 리스트 뷰의 확장 스타일은 정해진 함수나 메시지를 이용하여야 한다.
 	// 비트 수가 모자랄 정도로 많은 확장 스타일을 지원하므로 마스크 값을 알고 있는게 아니라면 함수를 활용해야 한다.
-	DWORD dwExListViewStyle = ListView_GetExtendedListViewStyle(hListView); 
+	DWORD	dwExListViewStyle = ListView_GetExtendedListViewStyle(hListView); 
+	WCHAR	lpszDlgItems[nHeaders][256];
 
 	switch(LOWORD(wParam)){
 		case ID_MENU_CALENDAR:
@@ -1046,21 +1086,15 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 			break;
 
 		case IDC_BTNAPPEND:
-			break;
-		case IDC_BTNDELETE:
+			if(HIWORD(wParam) == BN_CLICKED){
+				for(int i=0; i<nHeaders; i++){
+					GetDlgItemText(_hWnd, (INT_PTR)(IDC_EDPRIORITY + i), lpszDlgItems[i], 256);
+				}
+				RegisterItem(hListView, LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM /*| LVIF_STATE*/, 0, 0, lpszDlgItems);
+			}
 			break;
 
-		case IDC_EDPRIORITY:
-			break;
-		case IDC_EDCATEGORY:
-			break;
-		case IDC_EDDATEYEAR:
-			break;
-		case IDC_EDDATEMONTH:
-			break;
-		case IDC_EDDATEDAY:
-			break;
-		case IDC_EDTODO:
+		case IDC_BTNDELETE:
 			break;
 	}
 
@@ -1069,70 +1103,163 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 }
 
 // 비교 함수
-int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParam){
-	int ret,
-		LeftItem,
-		RightItem,
-		LeftValue	= 0,
-		RightValue	= 0;
+int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
+	// 현재 로직에선 아이템을 등록하는 함수 내부적으로 버퍼를 생성하여 lParam에 전달하고 있다.
+	// 때문에 함수가 종료된 후 스택 프레임이 해제되면서 인스턴스화 된 데이터가 전부 날아가기 때문에 유효하지 않은 값이 lParam1, lParm2로 전달된다.
+	// 이 함수 때문에 로직 전체를 변경할 생각은 없으므로 호출될 때 전체 리스트를 정렬하는 함수를 따로 작성하기로 한다.
+	// 항목을 등록할 때 즉, RegisterItem 함수를 호출하는 부분을 보면 LVIF_LPARAM 플래그를 설정한 것을 알 수 있다.
+	// 이 플래그를 설정해두면 사용자 정의 데이터를 저장해둘 수 있는데 이 값이 비교 함수 즉, 콜백함수인 Compare의 첫 번째 인수와 두 번째 인수로 전달된다.
+	WCHAR	lpszLT[256],
+			lpszRT[256];
 
-	WCHAR	lpszLT[0x10],
-			lpszRT[0x10];
+	LPNMLISTVIEW lv		= (LPNMLISTVIEW)lParamSort;
+	HWND hListView		= lv->hdr.hwndFrom;
 
+	// 항목 4개일 때 4번 호출된다. 즉, 항목 개수만큼 반복 호출되며 lv->iItem과 lv->iSubItem은 각각 -1과 0의 값을 가진다.
+	// 리스트 뷰 항목을 식별하거나 사용하지 않는 경우 lv의 iItem은 -1, 하위 항목이 없는 경우 lv의 iSubItem은 0이 된다.
+
+	// 아래와 같이 항목 번호를 0과 1로 지정하면 단순히 반전 시키는 동작도 가능하다.
+	// ListView_GetItemText(hListView, 0, lv->iSubItem, lpszLT, 256);
+	// ListView_GetItemText(hListView, 1, lv->iSubItem, lpszRT, 256);
+
+	/*
 	LVFINDINFO fi;
-	LPNMLISTVIEW lv	= (LPNMLISTVIEW)lParam;
-	HWND hListView	= lv->hdr.hwndFrom;
+	fi.flags = LVFI_STRING;
+	fi.psz = (LPWSTR)lParam1;
+	fi.vkDirection = VK_DOWN;
+	int idx = ListView_FindItem(hListView, -1, &fi);
+	ListView_GetItemText(hListView, idx, lv->iSubItem, lpszLT, 256);
 
-	fi.flags		= LVFI_STRING;
-	fi.psz			= (LPCWSTR)lParam1;
-	fi.vkDirection	= VK_DOWN;
-	LeftItem		= ListView_FindItem(hListView, -1, &fi);
+	fi.flags = LVFI_STRING;
+	fi.psz = (LPWSTR)lParam2;
+	fi.vkDirection = VK_DOWN;
+	idx = ListView_FindItem(hListView, -1, &fi);
+	ListView_GetItemText(hListView, idx, lv->iSubItem, lpszRT, 256);
+	*/
 
-	fi.psz			= (LPCWSTR)lParam2;
-	RightItem		= ListView_FindItem(hListView, -1, &fi);
+	int	LeftValue	= (int)lParam1,
+		RightValue	= (int)lParam2;
 
-	ListView_GetItemText(hListView, LeftItem, lv->iSubItem, lpszLT, 0x10);
-	ListView_GetItemText(hListView, RightItem, lv->iSubItem, lpszRT, 0x10);
-	
-	int i=0, j=0;
-	while(lpszLT[i]){ LeftValue *= 10; LeftValue += lpszLT[i] - '0'; i++; }
-	while(lpszRT[j]){ RightValue *= 10; RightValue += lpszRT[j] -'0'; j++; }
+	// LeftValue		= _wtoi(lpszLT);
+	// RightValue		= _wtoi(lpszRT);
+
+	// Debug : 문자열의 좌상단 좌표를 0,0으로 맞췄을 때 비트맵의 좌상단(0,0)에 출력된다.
+	// {
+	// 	WCHAR buf[256];
+	// 	StringCbPrintf(buf, sizeof(buf), L"LeftValue = %d, RightValue = %d", LeftValue, RightValue); 
+	//	MessageBox(HWND_DESKTOP, buf, L"Debug", MB_OK);
+	// }
 
 	return (((LeftValue) < (RightValue)) ? -1 : ((LeftValue) > (RightValue)) ? 1 : 0);
 }
 
+
 LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
-	LPNMHDR hdr;
-	LPNMLISTVIEW lv;
-	LPNMLVGETINFOTIP tip;
+	LPNMHDR				hdr;
+	LPNMLISTVIEW		lv;
+	LPNMLVGETINFOTIP	tip;
+	LPNMITEMACTIVATE	activate;
 
-	hdr = (LPNMHDR)lParam;
-	lv	= (LPNMLISTVIEW)lParam;
-	tip = (LPNMLVGETINFOTIP)lParam;
+	LVCOLUMN			Column;
 
-	WCHAR lpszToDo[256];
-	WCHAR lpszCaption[256];
+	int					ItemCount;
+
+	hdr			= (LPNMHDR)lParam;
+	lv			= (LPNMLISTVIEW)lParam;
+	tip			= (LPNMLVGETINFOTIP)lParam;
+	activate	= (LPNMITEMACTIVATE)lParam;
+
 
 	switch(hdr->code){
-		case LVN_GETINFOTIP:
-			// TODO: 디버깅 및 툴팁 출력
+		case LVN_ITEMACTIVATE:
 			if(hdr->hwndFrom == hListView){
-				ListView_GetItemText(hListView, tip->iItem, tip->iSubItem, lpszToDo, 256);
-				// SetWindowText(_hWnd, lpszToDo);
+				// 활성시 메시지 발생(Default : DblClk)
+			}
+			return 0;
+
+		case LVN_GETINFOTIP:
+			// TODO: 디버깅 및 툴팁 출력(완료)
+			if(hdr->hwndFrom == hListView){
+				WCHAR	lpszCat[256],
+						lpszToolTipText[256],
+						lpszToDo[nHeaders][256],
+						lpszHeader[nHeaders][256];
+				int		TextLength = 0;
+
+				for(int i=0; i<nHeaders; i++){
+					Column.mask			= LVCF_TEXT;
+					Column.pszText		= lpszHeader[i];
+					Column.cchTextMax	= sizeof(lpszHeader[i]) / sizeof(lpszHeader[i][0]);
+
+					ListView_GetColumn(hListView, i, &Column);
+					StringCbCopy(lpszHeader[i], 256, Column.pszText);
+					ListView_GetItemText(hListView, tip->iItem, i, lpszToDo[i], 256);
+
+					StringCbPrintf(lpszToolTipText, sizeof(lpszToolTipText), L"%s = %s\r\n", lpszHeader[i], lpszToDo[i]);
+					StringCchCat(lpszCat, sizeof(lpszCat) / sizeof(lpszCat[0]), lpszToolTipText);
+
+					TextLength += wcslen(lpszToolTipText);
+				}
+				lpszCat[TextLength-1] = lpszCat[TextLength-2] = 0;
+				StringCchPrintf(tip->pszText, TextLength, L"%s",lpszCat);
 				return 0;
 			}
 			break;
 
 		case LVN_ITEMCHANGED:
+			// 텍스트나 이미지의 변경, 포커스를 잃거나 선택 상태가 변경될 때 매번 보내진다.
 			if(lv->uChanged == LVIF_STATE && lv->uNewState == (LVIS_SELECTED | LVIS_FOCUSED)){
-				// ListView_GetItemText(hListView, lv->iiTem, lv->iSubITem, lpszCaption, 256);
+				// 첫 번째 항목을 선택한 상태에서 두 번째 항목으로 선택을 변경한다고 가정할 때, 총 세 번의 통지 메시지가 보내진다.
+				// [기존 항목의 선택 해제 -> 기존 항목의 포커스 해제 -> 새로운 항목 선택 & 포커스] 순이며 상세히 알고 있어야 적합한 처리를 할 수 있다.
+				// 해당 항목의 상태가 변경되고 변경된 상태가 선택과 포커스를 동시에 가질 때,
+				// 즉 새로운 항목으로 변경이 완료된 시점에 수행할 동작을 작성한다.
+
+
 			}
 			break;
 
 		case LVN_COLUMNCLICK:
-			// 정렬
+			// TODO: 콜백함수나 직접 정렬 코드 작성(완료)
 			ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
-			return TRUE;
+
+			/*
+			// 잘못된 로직
+			ItemCount = ListView_GetItemCount(hListView);
+
+			if(ItemCount > 1){
+				int		Index,
+						LeftItem,
+						RightItem,
+						LeftValue,
+						RightValue;
+
+				WCHAR	lpszLT[256],
+						lpszRT[256];
+
+				Index = 0;
+
+				// 1차 순회
+				while(Index < ItemCount - 1){
+					// 두 번째 인수에 검색 시작 위치 지정, -1일 경우 처음부터 검색하며 검색 시작 지점은 검색에서 제외된다.
+					// LeftItem		= ListView_GetNextItem(hListView, Index, LVNI_ALL | LVNI_BELOW);
+					// RightItem	= ListView_GetNextItem(hListView, Index + 1, LVNI_ALL | LVNI_BELOW);
+
+					ListView_GetItemText(hListView, Index, 0, lpszLT, 256);
+					ListView_GetItemText(hListView, Index + 1, 0, lpszRT, 256);
+
+					LeftValue		= _wtoi(lpszLT);
+					RightValue		= _wtoi(lpszRT);
+
+					if(LeftValue > RightValue){
+						// 항목 번호는 내부적으로 관리하기 때문에 한 항목에 대해서만 순서를 변경하면 된다.
+						MoveToIndex(hListView, nHeaders, Index+1, Index);
+					}
+
+					Index++;
+				}
+			}
+			*/
+			break;
 	}
 
 	return DefWindowProc(_hWnd, WM_NOTIFY, wParam, lParam);
@@ -1154,7 +1281,7 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	hListView	= CreateWindow(
 			WC_LISTVIEW,
 			NULL,
-			WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT /*| LVS_SORTASCENDING*/,
+			WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT, // LVS_SORTASCENDING
 			0,0,0,0,
 			_hWnd,
 			NULL,
@@ -1162,23 +1289,82 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 			NULL
 	);
 
-	ListView_SetExtendedListViewStyle(hListView, LVS_EX_FULLROWSELECT | LVS_EX_GRIDLINES | LVS_EX_CHECKBOXES | LVS_EX_HEADERDRAGDROP | LVS_EX_INFOTIP /*| LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT*/);
+	ListView_SetExtendedListViewStyle(
+			hListView,
+			LVS_EX_FULLROWSELECT |
+			LVS_EX_GRIDLINES |
+			LVS_EX_CHECKBOXES |
+			LVS_EX_HEADERDRAGDROP |
+			LVS_EX_INFOTIP |
+			LVS_EX_LABELTIP |
+			LVS_EX_TRACKSELECT
+			/*| LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT | LVS_EX_UNDERLINECOLD*/
+			);
+
+	// unit: ms, -1(System Default)
+	ListView_SetHoverTime(hListView, 10);
 	CheckBox = GridLine = RowSelect = DragDrop = TRUE;
 
-	int CellWidth	= ListViewWidth / nItems;
+	int CellWidth	= ListViewWidth / nHeaders;
 
 	// TODO: 디자인 끝낸 후 사용자가 항목 늘릴 수 있도록 확장
-	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"우선순위", 0);
-	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"구분", 1);
-	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"날짜", 2);
-	RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, L"할 일", 3);
+	for(int i=0; i<nHeaders; i++){
+		RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, HeaderName[i], i);
+	}
 
-	RegisterItems(hListView, LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE, 0, 0, nItems, L"1", L"해야될 일", L"2025-02-08", L"공부");
-	RegisterItems(hListView, LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE, 0, 0, nItems, L"2", L"해야될 일", L"2025-02-08", L"식사");
-	RegisterItems(hListView, LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE, 0, 0, nItems, L"3", L"해야될 일", L"2025-02-08", L"운동");
-	RegisterItems(hListView, LVIF_TEXT | LVIF_PARAM | LVIF_IMAGE, 0, 0, nItems, L"4", L"해야될 일", L"2025-02-08", L"수면");
+	/*
+	// 디버깅용 기본 항목 추가 - 사용 후 삭제 필요
+	LVITEM li;
+
+	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+	li.pszText		= L"1";
+	li.iItem		= 0;
+	li.iSubItem		= 0;
+	int idx = ListView_InsertItem(hListView, &li);
+
+	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
+	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
+	ListView_SetItemText(hListView, idx, 3, L"수면");
 	
-	// TODO: 입력칸 만들기
+	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+	li.pszText		= L"2";
+	li.iItem		= 0;
+	li.iSubItem		= 0;
+	idx = ListView_InsertItem(hListView, &li);
+
+	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
+	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
+	ListView_SetItemText(hListView, idx, 3, L"공부");
+
+	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+	li.pszText		= L"3";
+	li.iItem		= 0;
+	li.iSubItem		= 0;
+	idx = ListView_InsertItem(hListView, &li);
+
+	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
+	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
+	ListView_SetItemText(hListView, idx, 3, L"운동");
+
+	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+	li.pszText		= L"4";
+	li.iItem		= 0;
+	li.iSubItem		= 0;
+	idx = ListView_InsertItem(hListView, &li);
+
+	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
+	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
+	ListView_SetItemText(hListView, idx, 3, L"복습");
+	*/
+
+	// 스태틱
+	for(int i=0; i<nStaticItems; i++){
+		hControls[i] = CreateWindow(L"static", NULL, WS_CHILD | WS_VISIBLE | SS_LEFT, 0,0,0,0, _hWnd, (HMENU)-1, GetModuleHandle(NULL), NULL);
+
+		SetWindowText(hControls[i], HeaderName[i]);
+	}
+
+	// 에디트
 	WNDCLASS wc;
 	GetClassInfo(NULL, L"edit", &wc);
 	wc.hInstance		= GetModuleHandle(NULL);
@@ -1191,9 +1377,12 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	// SetProp 이용해서 여분 메모리 할당하고 데이터 전달
 	SetProp(_hWnd, L"CallBackEditWndProc", (HANDLE)OldEditProc);
 	for(int i=0; i<nEditItems; i++){
-		hControls[i] = CreateWindow(L"MySubClassingEdit", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL, 0,0,0,0, _hWnd, (HMENU)IDC_EDPRIORITY + i, GetModuleHandle(NULL), NULL);
+		hControls[nStaticItems + i] = CreateWindow(L"MySubClassingEdit", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL , 0,0,0,0, _hWnd, (HMENU)(INT_PTR)(IDC_EDPRIORITY + i), GetModuleHandle(NULL), NULL);
 	}
 
+	SetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE, GetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE) | ES_NUMBER);
+
+	// 버튼
 	GetClassInfo(NULL, L"button", &wc);
 	wc.hInstance		= GetModuleHandle(NULL);
 	wc.lpszClassName	= L"MySubClassingButton";
@@ -1203,23 +1392,23 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 
 	SetProp(_hWnd, L"CallBackButtonWndProc", (HANDLE)OldButtonProc);
 	for(int i=0; i<nButtonItems; i++){
-		hControls[nEditItems + i] = CreateWindow(L"MySubClassingButton", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 0,0,0,0, _hWnd, (HMENU)IDC_BTNAPPEND + i, GetModuleHandle(NULL), NULL);
+		hControls[nStaticItems + nEditItems + i] = CreateWindow(L"MySubClassingButton", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER, 0,0,0,0, _hWnd, (HMENU)(INT_PTR)(IDC_BTNAPPEND + i), GetModuleHandle(NULL), NULL);
 	}
 
-	SetWindowText(hControls[nEditItems], L"추가");
-	SetWindowText(hControls[nEditItems+1], L"삭제");
+	SetWindowText(hControls[nStaticItems + nEditItems], L"추가");
+	SetWindowText(hControls[nStaticItems + nEditItems+1], L"삭제");
 
-	SetFocus(hControls[0]);
+	SetFocus(hControls[nStaticItems + 0]);
     return 0;
 }
 
 LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
 	// 본래 프로시저로 변경
 	for(int i=0; i<nEditItems; i++){
-		SetClassLongPtr(hControls[i], GCLP_WNDPROC, (LONG_PTR)OldEditProc);
+		SetClassLongPtr(hControls[nStaticItems + i], GCLP_WNDPROC, (LONG_PTR)OldEditProc);
 	}
 	for(int i=0; i<nButtonItems; i++){
-		SetClassLongPtr(hControls[nEditItems + i], GCLP_WNDPROC, (LONG_PTR)OldButtonProc);
+		SetClassLongPtr(hControls[nStaticItems + nEditItems + i], GCLP_WNDPROC, (LONG_PTR)OldButtonProc);
 	}
 
 	// 여분 메모리 삭제
@@ -1233,6 +1422,15 @@ LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
 LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 	DWORD dwStyle, dwExStyle;
 	RECT srt, crt, wrt;
+
+	int x, y,
+		Padding			= 10,
+		EditWidth,
+		EditHeight		= 20,
+		StaticWidth,
+		StaticHeight	= 20,
+		ButtonWidth,
+		ButtonHeight	= 20;
 
     if (wParam != SIZE_MINIMIZED) {
 		GetClientRect(_hWnd, &crt);
@@ -1249,20 +1447,46 @@ LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 		if(dwStyle & WS_VSCROLL){ crt.right += GetSystemMetrics(SM_CXVSCROLL); }
 		if(dwStyle & WS_HSCROLL){ crt.bottom += GetSystemMetrics(SM_CYHSCROLL); }
 
-		SetWindowPos(hListView, NULL, 10, 10, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
+		SetWindowPos(hListView, NULL, Padding, Padding, crt.right - crt.left, crt.bottom - crt.top, SWP_NOZORDER);
 		ListViewWidth	= crt.right - crt.left;
 		ListViewHeight	= crt.bottom - crt.top;
 
 		// TODO: 위치 및 크기 설정
+		HDWP hdwpStatic = BeginDeferWindowPos(nStaticItems);
+		for(int i=0; i<nEditItems; i++){
+			GetWindowRect(hListView, &wrt);
+			ScreenToClient(_hWnd, (LPPOINT)&wrt);
+			ScreenToClient(_hWnd, (LPPOINT)&wrt+1);
+			
+			x			= wrt.right + Padding;
+			y			= wrt.top;
+			StaticWidth = 100;
+			hdwpStatic	= DeferWindowPos(hdwpStatic, hControls[i], NULL, x, y + i * StaticHeight, StaticWidth, StaticHeight, SWP_NOZORDER);
+		}
+		EndDeferWindowPos(hdwpStatic);
+
 		HDWP hdwpEdit	= BeginDeferWindowPos(nEditItems);
-		for(int i=0, j=0; i<nEditItems; j+=70, i++){
-			hdwpEdit	= DeferWindowPos(hdwpEdit, hControls[i], NULL, 10 + j, ListViewHeight + 10 + 5, 50, 20, SWP_NOZORDER);
+		for(int i=0; i<nEditItems; i++){
+			GetWindowRect(hControls[0], &wrt);
+			ScreenToClient(_hWnd, (LPPOINT)&wrt);
+			ScreenToClient(_hWnd, (LPPOINT)&wrt+1);
+			GetClientRect(_hWnd, &crt);
+
+			x			= wrt.right + Padding;
+			y			= wrt.top;
+			EditWidth	= (crt.right - crt.left) - (ListViewWidth + StaticWidth + Padding * 4);
+			hdwpEdit	= DeferWindowPos(hdwpEdit, hControls[nStaticItems + i], NULL, x, y + i * EditHeight, EditWidth, EditHeight, SWP_NOZORDER);
 		}
 		EndDeferWindowPos(hdwpEdit);
 
 		HDWP hdwpButton	= BeginDeferWindowPos(nButtonItems);
-		for(int i=0, j=0; i<nButtonItems; j+=70, i++){
-			hdwpButton	= DeferWindowPos(hdwpButton, hControls[nEditItems + i], NULL, 10 + j, ListViewHeight + 10 + 35, 50, 20, SWP_NOZORDER);
+		for(int i=nButtonItems, j=0; i>0 && j<nButtonItems; j++, i--){
+			GetClientRect(_hWnd, &crt);
+
+			ButtonWidth = 100;
+			x			= (crt.right - crt.left) - ((ButtonWidth + Padding * 2) * i);
+			y			= (crt.bottom - crt.top) - (Padding + ButtonHeight);
+			hdwpButton	= DeferWindowPos(hdwpButton, hControls[nStaticItems + nEditItems + j], NULL, x, y, ButtonWidth, ButtonHeight, SWP_NOZORDER);
 		}
 		EndDeferWindowPos(hdwpButton);
     }
@@ -1313,3 +1537,45 @@ LRESULT MainWindow::OnMouseMove(WPARAM wParam, LPARAM lParam){
 LRESULT MainWindow::OnLButtonUp(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
+
+/*	// 수행시간이 길어진다
+BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To){
+	int		i = 0,
+			idx = 0;
+
+	LVITEM	li;
+
+	WCHAR** lpszPrevText = (WCHAR**)malloc(sizeof(WCHAR*) * nItems);
+	for(i=0; i<nItems; i++){
+		lpszPrevText[i] = (WCHAR*)malloc(sizeof(WCHAR) * 256);
+	}
+
+	for(i=0; i<nItems; i++){
+		ListView_GetItemText(hWnd, From, i, lpszPrevText[i], 256);
+	}
+
+	if(!ListView_DeleteItem(hWnd, From)) { return FALSE; }
+
+	// 항목 작성시 iSubItem을 지정하지 않으면 등록할 수 없다.
+	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM; //| LVIF_STATE;
+	li.iItem		= To;
+	li.iSubItem		= 0;
+	li.pszText		= lpszPrevText[0];
+	li.lParam		= (LPARAM)lpszPrevText[0];
+	if((idx = ListView_InsertItem(hWnd, &li)) == -1) { return FALSE; }
+
+	i = 1;
+	while(i <= (nItems - 1)){
+		ListView_SetItemText(hWnd, idx, i, lpszPrevText[i]);
+		i++;
+	}
+
+	for(i=0; i<nItems; i++){
+		free(lpszPrevText[i]);
+	}
+	free(lpszPrevText);
+
+	return TRUE;
+}
+*/
+
