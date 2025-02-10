@@ -970,6 +970,8 @@ LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 				bKeyReleased = ((KeyFlags & KF_UP) == KF_UP);
 
 				// 컨트롤 포커스 한 번에 관리
+				HWND hFocus;
+				INT_PTR	CtrlID;
 				switch(VKCode){
 					case VK_TAB:
 						if(!bKeyReleased){
@@ -978,8 +980,15 @@ LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 							}else{
 								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)1, (LPARAM)hWnd);
 							}
+							return 0;
 						}
-						return 0;
+						break;
+
+					case VK_RETURN:
+						hFocus = GetFocus();
+						CtrlID = GetDlgCtrlID((HWND)hFocus);
+						SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWORD(CtrlID, BN_CLICKED), (LPARAM)hFocus);
+						break;
 				}
 			}
 			break;
@@ -1161,17 +1170,12 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 	LPNMITEMACTIVATE	activate;
 
 	LVCOLUMN			Column;
-
 	int					ItemCount;
 
 	hdr			= (LPNMHDR)lParam;
-	lv			= (LPNMLISTVIEW)lParam;
-	tip			= (LPNMLVGETINFOTIP)lParam;
-	activate	= (LPNMITEMACTIVATE)lParam;
-
-
 	switch(hdr->code){
 		case LVN_ITEMACTIVATE:
+			activate	= (LPNMITEMACTIVATE)lParam;
 			if(hdr->hwndFrom == hListView){
 				// 활성시 메시지 발생(Default : DblClk)
 			}
@@ -1186,6 +1190,8 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 						lpszHeader[nHeaders][256];
 				int		TextLength = 0;
 
+				tip		= (LPNMLVGETINFOTIP)lParam;
+				memset(lpszCat, 0 ,sizeof(lpszCat));
 				for(int i=0; i<nHeaders; i++){
 					Column.mask			= LVCF_TEXT;
 					Column.pszText		= lpszHeader[i];
@@ -1193,21 +1199,23 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 
 					ListView_GetColumn(hListView, i, &Column);
 					StringCbCopy(lpszHeader[i], 256, Column.pszText);
-					ListView_GetItemText(hListView, tip->iItem, i, lpszToDo[i], 256);
 
+					ListView_GetItemText(hListView, tip->iItem, i, lpszToDo[i], 256);
 					StringCbPrintf(lpszToolTipText, sizeof(lpszToolTipText), L"%s = %s\r\n", lpszHeader[i], lpszToDo[i]);
 					StringCchCat(lpszCat, sizeof(lpszCat) / sizeof(lpszCat[0]), lpszToolTipText);
 
 					TextLength += wcslen(lpszToolTipText);
 				}
-				lpszCat[TextLength-1] = lpszCat[TextLength-2] = 0;
-				StringCchPrintf(tip->pszText, TextLength, L"%s",lpszCat);
+
+				lpszCat[TextLength - 1] = lpszCat[TextLength - 2] = 0;
+				StringCchPrintf(tip->pszText, TextLength + 1, L"%s",lpszCat);
 				return 0;
 			}
 			break;
 
 		case LVN_ITEMCHANGED:
 			// 텍스트나 이미지의 변경, 포커스를 잃거나 선택 상태가 변경될 때 매번 보내진다.
+			lv			= (LPNMLISTVIEW)lParam;
 			if(lv->uChanged == LVIF_STATE && lv->uNewState == (LVIS_SELECTED | LVIS_FOCUSED)){
 				// 첫 번째 항목을 선택한 상태에서 두 번째 항목으로 선택을 변경한다고 가정할 때, 총 세 번의 통지 메시지가 보내진다.
 				// [기존 항목의 선택 해제 -> 기존 항목의 포커스 해제 -> 새로운 항목 선택 & 포커스] 순이며 상세히 알고 있어야 적합한 처리를 할 수 있다.
@@ -1220,6 +1228,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 
 		case LVN_COLUMNCLICK:
 			// TODO: 콜백함수나 직접 정렬 코드 작성(완료)
+			lv			= (LPNMLISTVIEW)lParam;
 			ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
 
 			/*
