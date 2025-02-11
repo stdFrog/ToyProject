@@ -63,7 +63,13 @@ BOOL CheckLeapYear(int Year);
 // BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
 
 int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
+int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
+
+struct tag_Arguments{
+	int Priority;
+	WCHAR buf[256];
+};
 
 // Encapsulation
 template <class DERIVED_TYPE>
@@ -662,7 +668,6 @@ class MainWindow : public BaseWindow<MainWindow> {
 	static const WCHAR* HeaderName[nHeaders];
 	static BOOL CheckBox, GridLine, RowSelect, DragDrop;
 
-
     typedef struct tag_MSGMAP {
         UINT iMessage;
         LRESULT(MainWindow::* lpfnWndProc)(WPARAM, LPARAM);
@@ -812,8 +817,7 @@ BOOL MainWindow::RegisterHeader(HWND hListView, UINT Mask, int Format, int Width
 
 BOOL MainWindow::RegisterItem(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, WCHAR (*InputItems)[256]){
 	int i		= 0,
-		idx		= 0,
-		Length	= 0;
+		idx		= 0;
 
 	LVITEM	LI;
 	WCHAR	TextItems[nHeaders][256];
@@ -837,8 +841,7 @@ BOOL MainWindow::RegisterItem(HWND hListView, UINT Mask, int RowIndex, int Colum
 	LI.mask		= Mask;
 	LI.pszText	= (LPWSTR)TextItems[0];
 	if((Mask & LVIF_PARAM) == LVIF_PARAM){
-		// 내부 변수 사용시 스택 해제되면서 데이터 사라짐
-		LI.lParam = (LPARAM)_wtoi(TextItems[0]);
+		// LI.lParam = (LPARAM)LI.pszText;
 	}
 
 	idx = ListView_InsertItem(hListView, &LI);
@@ -886,7 +889,7 @@ LRESULT MainWindow::OnChangeFocus(WPARAM wParam, LPARAM lParam){
 	WPARAM OnLShift = wParam;
 
 	// LPARAM: HWND type
-	// WPARAM: PREV(0), NEXT(1)
+	// WPARAM: TAB -> PREV(0), NEXT(1), Arrow -> PREV(2), NEXT(3)
 	switch(OnLShift){
 		case 0:
 			for(int i=nStaticItems + 0; i<nControls; i++){
@@ -907,6 +910,26 @@ LRESULT MainWindow::OnChangeFocus(WPARAM wParam, LPARAM lParam){
 						SetFocus(hControls[nStaticItems + 0]);
 					}else{
 						SetFocus(hControls[i + 1]);
+					}
+				}
+			}
+			break;
+
+		case 2:
+			for(int i=nStaticItems + 0; i<nControls; i++){
+				if(hControls[i] == hPrevFocus){
+					if(i != nStaticItems + (nEditItems - 1)){
+						SetFocus(hControls[i+1]);
+					}
+				}
+			}
+			break;
+
+		case 3:
+			for(int i=nStaticItems + 0; i<nControls; i++){
+				if(hControls[i] == hPrevFocus){
+					if(i != nStaticItems){
+						SetFocus(hControls[i-1]);
 					}
 				}
 			}
@@ -1039,12 +1062,20 @@ LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPa
 
 				// 컨트롤 포커스 한 번에 관리
 				switch(VKCode){
+					case VK_UP:
+					case VK_DOWN:
 					case VK_TAB:
 						if(!bKeyReleased){
-							if(GetKeyState(VK_LSHIFT) & 0x8000){
-								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)0, (LPARAM)hWnd);
-							}else{
-								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)1, (LPARAM)hWnd);
+							if(VKCode == VK_TAB){
+								if(GetKeyState(VK_LSHIFT) & 0x8000){
+									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)0, (LPARAM)hWnd);
+								}else{
+									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)1, (LPARAM)hWnd);
+								}
+							}else if(VKCode == VK_DOWN){
+								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)2, (LPARAM)hWnd);
+							}else if(VKCode == VK_UP){
+								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)3, (LPARAM)hWnd);
 							}
 						}
 						return 0;
@@ -1111,6 +1142,47 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
+	WCHAR	lpszLT[256],
+			lpszRT[256];
+
+	LPNMLISTVIEW lv		= (LPNMLISTVIEW)lParamSort;
+	HWND hListView		= lv->hdr.hwndFrom;
+
+	ListView_GetItemText(hListView, lParam1, IDC_EDDATE - IDC_EDPRIORITY, lpszLT, 256);
+	ListView_GetItemText(hListView, lParam2, IDC_EDDATE - IDC_EDPRIORITY, lpszRT, 256);
+
+	int	MinLength,
+		LeftValue,
+		RightValue,
+		LeftValueLength,
+		RightValueLength;
+
+	LeftValueLength		= wcslen(lpszLT);
+	RightValueLength	= wcslen(lpszRT);
+
+	if(LeftValueLength != RightValueLength){
+		// TODO: 날짜 서식 지정 후 비교 연산 수행
+		#define min(a,b) (((a)<(b)) ? (a) : (b))
+		LeftValue	= _wtoi(lpszLT);
+		RightValue	= _wtoi(lpszRT);
+	}else{
+		LeftValue	= _wtoi(lpszLT);
+		RightValue	= _wtoi(lpszRT);
+	}
+
+	if(LeftValue == RightValue){
+		ListView_GetItemText(hListView, lParam1, IDC_EDPRIORITY - IDC_EDPRIORITY, lpszLT, 256);
+		ListView_GetItemText(hListView, lParam2, IDC_EDPRIORITY - IDC_EDPRIORITY, lpszRT, 256);
+
+		LeftValue	= _wtoi(lpszLT);
+		RightValue	= _wtoi(lpszRT);
+	}
+
+	return (((LeftValue) < (RightValue)) ? -1 : (((LeftValue) > (RightValue)) ? 1 : 0));
+}
+
+/*
 // 비교 함수
 int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	// 현재 로직에선 아이템을 등록하는 함수 내부적으로 버퍼를 생성하여 lParam에 전달하고 있다.
@@ -1118,8 +1190,8 @@ int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	// 이 함수 때문에 로직 전체를 변경할 생각은 없으므로 호출될 때 전체 리스트를 정렬하는 함수를 따로 작성하기로 한다.
 	// 항목을 등록할 때 즉, RegisterItem 함수를 호출하는 부분을 보면 LVIF_LPARAM 플래그를 설정한 것을 알 수 있다.
 	// 이 플래그를 설정해두면 사용자 정의 데이터를 저장해둘 수 있는데 이 값이 비교 함수 즉, 콜백함수인 Compare의 첫 번째 인수와 두 번째 인수로 전달된다.
-	WCHAR	lpszLT[256],
-			lpszRT[256];
+	//WCHAR	lpszLT[256],
+	//		lpszRT[256];
 
 	LPNMLISTVIEW lv		= (LPNMLISTVIEW)lParamSort;
 	HWND hListView		= lv->hdr.hwndFrom;
@@ -1131,9 +1203,9 @@ int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	// ListView_GetItemText(hListView, 0, lv->iSubItem, lpszLT, 256);
 	// ListView_GetItemText(hListView, 1, lv->iSubItem, lpszRT, 256);
 
-	/*
 	LVFINDINFO fi;
-	fi.flags = LVFI_STRING;
+	fi.flags = LVFI_PARAM;
+	fi.lParam = lParam1;
 	fi.psz = (LPWSTR)lParam1;
 	fi.vkDirection = VK_DOWN;
 	int idx = ListView_FindItem(hListView, -1, &fi);
@@ -1144,7 +1216,6 @@ int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	fi.vkDirection = VK_DOWN;
 	idx = ListView_FindItem(hListView, -1, &fi);
 	ListView_GetItemText(hListView, idx, lv->iSubItem, lpszRT, 256);
-	*/
 
 	int	LeftValue	= (int)lParam1,
 		RightValue	= (int)lParam2;
@@ -1154,14 +1225,14 @@ int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 
 	// Debug : 문자열의 좌상단 좌표를 0,0으로 맞췄을 때 비트맵의 좌상단(0,0)에 출력된다.
 	// {
-	// 	WCHAR buf[256];
-	// 	StringCbPrintf(buf, sizeof(buf), L"LeftValue = %d, RightValue = %d", LeftValue, RightValue); 
+	//	WCHAR buf[256];
+	//	StringCbPrintf(buf, sizeof(buf), L"lParam1 = %s, lParam2 = %s", (LPWSTR)lParam1, (LPWSTR)lParam2);
 	//	MessageBox(HWND_DESKTOP, buf, L"Debug", MB_OK);
 	// }
 
 	return (((LeftValue) < (RightValue)) ? -1 : ((LeftValue) > (RightValue)) ? 1 : 0);
 }
-
+*/
 
 LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 	LPNMHDR				hdr;
@@ -1229,7 +1300,8 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 		case LVN_COLUMNCLICK:
 			// TODO: 콜백함수나 직접 정렬 코드 작성(완료)
 			lv			= (LPNMLISTVIEW)lParam;
-			ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
+			// ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
+			ListView_SortItemsEx(hListView, (PFNLVCOMPARE)CompareEx, lv);
 
 			/*
 			// 잘못된 로직
