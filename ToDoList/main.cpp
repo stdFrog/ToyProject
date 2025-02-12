@@ -1403,32 +1403,36 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 
 		case LVN_GETINFOTIP:
 			if(hdr->hwndFrom == hListView){
-				WCHAR	lpszCat[256],
-						lpszToolTipText[256],
-						lpszToDo[nHeaders][256],
-						lpszHeader[nHeaders][256];
-				int		TextLength = 0;
-
 				tip		= (LPNMLVGETINFOTIP)lParam;
-				memset(lpszCat, 0 ,sizeof(lpszCat));
-				for(int i=0; i<nHeaders; i++){
-					Column.mask			= LVCF_TEXT;
-					Column.pszText		= lpszHeader[i];
-					Column.cchTextMax	= sizeof(lpszHeader[i]) / sizeof(lpszHeader[i][0]);
 
-					ListView_GetColumn(hListView, i, &Column);
-					StringCbCopy(lpszHeader[i], 256, Column.pszText);
+				if(tip->iSubItem == 0){
+					WCHAR	lpszCat[256],
+							lpszToolTipText[256],
+							lpszToDo[nHeaders][256],
+							lpszHeader[nHeaders][256];
+					int		TextLength = 0;
 
-					ListView_GetItemText(hListView, tip->iItem, i, lpszToDo[i], 256);
-					StringCbPrintf(lpszToolTipText, sizeof(lpszToolTipText), L"%s = %s\r\n", lpszHeader[i], lpszToDo[i]);
-					StringCchCat(lpszCat, sizeof(lpszCat) / sizeof(lpszCat[0]), lpszToolTipText);
+					memset(lpszCat, 0 ,sizeof(lpszCat));
+					for(int i=0; i < nHeaders; i++){
+						Column.mask			= LVCF_TEXT;
+						Column.pszText		= lpszHeader[i];
+						Column.cchTextMax	= sizeof(lpszHeader[i]) / sizeof(lpszHeader[i][0]);
 
-					TextLength += wcslen(lpszToolTipText);
+						ListView_GetColumn(hListView, i, &Column);
+						StringCbCopy(lpszHeader[i], 256, Column.pszText);
+
+						ListView_GetItemText(hListView, tip->iItem, i, lpszToDo[i], 256);
+						StringCbPrintf(lpszToolTipText, sizeof(lpszToolTipText), L"%s = %s\r\n", lpszHeader[i], lpszToDo[i]);
+						StringCchCat(lpszCat, sizeof(lpszCat) / sizeof(lpszCat[0]), lpszToolTipText);
+
+						TextLength += wcslen(lpszToolTipText);
+					}
+
+					lpszCat[TextLength - 1] = lpszCat[TextLength - 2] = 0;
+					StringCchPrintf(tip->pszText, TextLength + 1, L"%s",lpszCat);
+				}else{
+
 				}
-
-				lpszCat[TextLength - 1] = lpszCat[TextLength - 2] = 0;
-				StringCchPrintf(tip->pszText, TextLength + 1, L"%s",lpszCat);
-				return 0;
 			}
 			break;
 
@@ -1441,7 +1445,33 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 				// 해당 항목의 상태가 변경되고 변경된 상태가 선택과 포커스를 동시에 가질 때,
 				// 즉 새로운 항목으로 변경이 완료된 시점에 수행할 동작을 작성한다.
 
+				// 리스트 뷰의 각 항목이 가지는 최대 문자열 길이는 128이다(NULL포함).
+				WCHAR lpszItemText[nHeaders][256];
+				for(int i=0; i < nHeaders; i++){
+					ListView_GetItemText(hListView, lv->iItem, i, lpszItemText[i], 256);
+					SetWindowText(hControls[nStaticItems + i], lpszItemText[i]);
+				}
 
+				/*
+				// 가상 리스트뷰 컨트롤이나 오너 드로우 리스트 뷰라면 최대 문자열 길이를 늘릴 수 있다.
+				int ret,
+					Length			= 128;
+
+				LVITEM ToDoItem		= {0,};
+				ToDoItem.iSubItem	= nEditItems - 1;
+
+				do{
+					Length *= 2;
+					if(lpszToDoText != NULL){ free(lpszToDoText); }
+					lpszToDoText = (WCHAR*)malloc(sizeof(WCHAR) * Length);
+					ToDoItem.pszText	= lpszToDoText;
+					ToDoItem.cchTextMax	= Length;
+					ret = SendMessage(hListView, LVM_GETITEMTEXT, (WPARAM)lv->iItem, (LPARAM)&ToDoItem);
+				}while(ret == Length - 1);
+
+				SetWindowText(hControls[nStaticItems + nEditItems -1], lpszToDoText);
+				free(lpszToDoText);
+				*/
 			}
 			break;
 
@@ -1563,15 +1593,25 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 		hControls[nStaticItems + i] = CreateWindow(L"MySubClassingEdit", NULL, WS_CHILD | WS_VISIBLE | WS_BORDER | ES_AUTOHSCROLL , 0,0,0,0, _hWnd, (HMENU)(INT_PTR)(IDC_EDPRIORITY + i), GetModuleHandle(NULL), NULL);
 	}
 
+	// Priority
 	SetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE, GetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE) | ES_NUMBER);
+	SendMessage(hControls[nStaticItems + 0], EM_LIMITTEXT, (WPARAM)9, 0);								// 정수 최대값이 10문자이므로 범위를 제한한다.
 
-	// 기본 날짜 포맷
+	// Category
+	SendMessage(hControls[nStaticItems + 1], EM_LIMITTEXT, (WPARAM)32, 0);								// 문자 조합시 최대 길이가 256이므로 범위를 제한한다.
+
+	// Date : 기본 날짜 포맷
 	SYSTEMTIME st;
 	GetLocalTime(&st);
 	WCHAR DATE[256];
 	StringCbPrintf(DATE, sizeof(DATE), L"%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
-	SetWindowText(hControls[nStaticItems + nEditItems - 2], DATE);
-	SendMessage(hControls[nStaticItems + nEditItems - 2], EM_LIMITTEXT, (WPARAM)23, 0);
+	SetWindowText(hControls[nStaticItems + 2], DATE);
+	SendMessage(hControls[nStaticItems + 2], EM_LIMITTEXT, (WPARAM)23, 0);								// 날짜 서식 최대 길이로 범위를 제한한다.
+
+	// ToDo
+	// 기본적으로 리스트 뷰 컨트롤에 문자열 최대 허용 길이가 설정되어 있다.
+	// 해당 프로젝트에서는 오너 드로우 리스트 뷰 컨트롤을 사용할 필요가 없으므로 변경하지 않기로 한다.
+	SendMessage(hControls[nStaticItems + 3], EM_LIMITTEXT, (WPARAM)128 - (23 + 32 + 9), 0);				// 리스트 뷰 컨트롤의 최대 허용 길이로 범위를 제한한다.
 
 	// 버튼
 	GetClassInfo(NULL, L"button", &wc);
