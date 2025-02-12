@@ -58,6 +58,10 @@
 
 #define WM_CHANGEFOCUS		WM_USER + 1
 
+#define min(a,b) (((a)<(b)) ? (a) : (b))
+#define TEMPLATE_DATE			L"****-**-**"
+#define TEMPLATE_DATE_UNTIL		L"****-**-** ~ ****-**-**"
+
 void CenterWindow(HWND hWnd);
 BOOL CheckLeapYear(int Year);
 // BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
@@ -636,6 +640,71 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 
 	DeleteObject(hTodayBrush);
 	DeleteObject(hPen);
+
+	// TODO: 범위 유효성 검사 - 캘린더 확장 기능 추가시 적용
+	/*
+	WCHAR	lpszDate[256];
+
+	HWND hDateWnd = FindWindowEx(GetParent(_hWnd), NULL, L"MySubClassingEdit", NULL);
+	while(IDC_EDDATE != (INT_PTR)GetDlgCtrlID(hDateWnd)){
+		hDateWnd = FindWindowEx(GetParent(_hWnd), NULL, L"MySubClassingEdit", NULL);
+	}
+
+	GetWindowText(hDateWnd, lpszDate, 256);
+	if(lpszDate == NULL){ MessageBeep(0); return 0;}
+
+	int TemplateDateLength		= wcslen(TEMPLATE_DATE),
+		TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL),
+		TextLength				= wcslen(lpszDate);
+
+	if(TextLength != TemplateDateLength && TextLength != TemplateDateUntilLength){
+		MessageBeep(0);
+		return 0;
+	}
+
+	// 포맷 검사
+	for(int i=0; lpszDate[i]; i++){
+		if(lpszDate[i] >= '0' && lpszDate[i] <'9'){
+			lpszDate[i] = '*';
+		}
+	}
+
+	if(wcscmp(lpszDate, TEMPLATE_DATE) != 0 && wcscmp(lpszDate, TEMPLATE_DATE_UNTIL) != 0){
+		MessageBeep(0);
+		return 0;
+	}
+	
+	const int nSeps = 3;
+	int i		= 0,
+		j		= 0,
+		x		= 0,
+		DateTokenInt[nSeps] = {0,};
+
+	WCHAR DateToken[nSeps][256];
+	WCHAR Separators[] = L"-";					// 추후 '.'도 추가될 수 있음
+	WCHAR* ptr = wcstok(lpszDate, lpszDate);
+	while(ptr != NULL){
+		StringCbCopy(DateToken[i], sizeof(DateToken[i]), ptr);
+		ptr = wcstok(NULL, Separators);
+	}
+
+	for(i=0; nSeps; i++){
+		x = 0;
+		while(DateToken[i][j]){
+			x*= 10;
+			x+= DateToken[i][j] - '0';
+
+			j++;
+		}
+
+		DateTokenInt[i] = x;
+	}
+
+	int Year	= 0,
+		Month	= 1,
+		Day		= 2;
+	if(DateToken[Year] ... // 범위 검사)
+	*/
 }
 
 void PopupWindow::DrawMouseTracker(HDC hdc){
@@ -687,6 +756,7 @@ class MainWindow : public BaseWindow<MainWindow> {
 		{WM_MOUSEMOVE, &MainWindow::OnMouseMove},
 		{WM_LBUTTONUP, &MainWindow::OnLButtonUp},
 		{WM_CTLCOLORSTATIC, &MainWindow::OnCtlColorStatic},
+		{WM_SETFOCUS, &MainWindow::OnSetFocus},
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
 		{WM_CHANGEFOCUS, &MainWindow::OnChangeFocus},
         {WM_CREATE, &MainWindow::OnCreate},
@@ -713,6 +783,7 @@ private:
 	LRESULT OnCommand(WPARAM wParam, LPARAM lParam);
 	LRESULT OnNotify(WPARAM wParam, LPARAM lParam);
     LRESULT OnCtlColorStatic(WPARAM wParam, LPARAM lParam);
+    LRESULT OnSetFocus(WPARAM wParam, LPARAM lParam);
 
 	LRESULT OnLButtonDown(WPARAM wParam, LPARAM lParam);
 	LRESULT OnMouseMove(WPARAM wParam, LPARAM lParam);
@@ -955,6 +1026,11 @@ LRESULT MainWindow::OnCtlColorStatic(WPARAM wParam, LPARAM lParam){
 	return DefWindowProc(_hWnd, WM_CTLCOLORSTATIC, wParam, lParam);
 }
 
+LRESULT MainWindow::OnSetFocus(WPARAM wParam, LPARAM lParam){
+	SetFocus(hControls[nStaticItems]);
+	return 0;
+}
+
 LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam){
 	static CREATESTRUCT* cs;
 	static WNDPROC OldButtonProc;
@@ -993,7 +1069,6 @@ LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 				bKeyReleased = ((KeyFlags & KF_UP) == KF_UP);
 
 				// 컨트롤 포커스 한 번에 관리
-				HWND hFocus;
 				INT_PTR	CtrlID;
 				switch(VKCode){
 					case VK_TAB:
@@ -1005,12 +1080,6 @@ LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM l
 							}
 							return 0;
 						}
-						break;
-
-					case VK_RETURN:
-						hFocus = GetFocus();
-						CtrlID = GetDlgCtrlID((HWND)hFocus);
-						SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWORD(CtrlID, BN_CLICKED), (LPARAM)hFocus);
 						break;
 				}
 			}
@@ -1027,12 +1096,30 @@ LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPa
 	static CREATESTRUCT* cs;
 	static WNDPROC OldEditProc;
 	static BOOL bNext = TRUE;
+	static HWND DateWnd;
 
 	if(OldEditProc == NULL){
 		OldEditProc = (WNDPROC)GetProp(GetParent(hWnd), L"CallBackEditWndProc");
 	}
 
 	switch(iMessage){
+		case WM_LBUTTONDOWN:
+			SetFocus(hWnd);
+			return 0;
+
+		case WM_SETFOCUS:
+			SendMessage(hWnd, EM_SETSEL, 0, -1);
+			break;
+
+		// case WM_KILLFOCUS:
+			// {
+				// 이렇게 하면 버튼이 포커스를 받는 시점에 곧장 포커스를 빼앗아 오기 때문에 기본 동작을 수행하지 않는다.
+				// 재진입 가능한 특성을 갖기 때문에 VK_RETURN의 동작을 처리하는 도중에 포커스를 바로 빼앗아버린다.
+				// HWND hAppend = FindWindowEx(GetParent(hWnd), NULL, L"MySubClassingButton", L"추가");
+				// if(hAppend == (HWND)wParam){ SetFocus(hWnd); }
+			// }
+		//	break;
+
 		case WM_CHAR:
 		case WM_KEYUP:
 		case WM_KEYDOWN:
@@ -1065,25 +1152,78 @@ LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPa
 					case VK_UP:
 					case VK_DOWN:
 					case VK_TAB:
-						if(!bKeyReleased){
-							if(VKCode == VK_TAB){
-								if(GetKeyState(VK_LSHIFT) & 0x8000){
-									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)0, (LPARAM)hWnd);
-								}else{
-									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)1, (LPARAM)hWnd);
-								}
-							}else if(VKCode == VK_DOWN){
-								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)2, (LPARAM)hWnd);
-							}else if(VKCode == VK_UP){
-								SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)3, (LPARAM)hWnd);
-							}
-						}
-						return 0;
-
 					case VK_RETURN:
-						{
-							HWND hAppend = FindWindowEx(GetParent(hWnd), NULL, L"MySubClassingButton", L"추가");
-							SendMessage(GetParent(hWnd), WM_COMMAND, MAKEWORD(IDC_BTNAPPEND, BN_CLICKED), (LPARAM)hAppend);
+						if(VKCode == VK_RETURN){
+							if(bKeyReleased){
+								if(DateWnd != NULL){
+									WCHAR	lpszDate[256];
+
+									GetWindowText(DateWnd, lpszDate, 256);
+									if(lpszDate == NULL){ MessageBeep(0); return 0;}
+
+									int TemplateDateLength		= wcslen(TEMPLATE_DATE),
+										TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL),
+										TextLength				= wcslen(lpszDate);
+
+									if(TextLength != TemplateDateLength && TextLength != TemplateDateUntilLength){
+										MessageBeep(0);
+										return 0;
+									}
+
+									// 포맷 검사
+									for(int i=0; lpszDate[i]; i++){
+										if(lpszDate[i] >= '0' && lpszDate[i] <'9'){
+											lpszDate[i] = '*';
+										}
+									}
+
+									if(wcscmp(lpszDate, TEMPLATE_DATE) != 0 && wcscmp(lpszDate, TEMPLATE_DATE_UNTIL) != 0){
+										MessageBeep(0);
+										return 0;
+									}
+								}
+								// 키 입력을 놓았을 때 메시지를 보낸다.
+								HWND hAppend = FindWindowEx(GetParent(hWnd), NULL, L"MySubClassingButton", L"추가");
+								// SendMessage는 대상이 모든 처리를 끝낼 때까지 리턴하지 않는다.
+								SendMessage(hAppend, BM_CLICK, 0, 0);
+								// 이 점을 이용하면 버튼이 기본 동작을 끝낸 후 포커스를 옮기는 것이 가능하다.
+								SetFocus(hWnd);
+							}
+						}else{
+							if(!bKeyReleased){
+								if(IDC_EDDATE == (INT_PTR)GetDlgCtrlID(hWnd)){
+									WCHAR lpszDate[256];
+									GetWindowText(hWnd, lpszDate, 256);
+									int TemplateDateLength		= wcslen(TEMPLATE_DATE),
+										TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL),
+										TextLength				= wcslen(lpszDate);
+
+									if(TextLength != TemplateDateLength && TextLength != TemplateDateUntilLength){
+										SYSTEMTIME st;
+										GetLocalTime(&st);
+
+										if(TextLength > TemplateDateLength){
+											StringCbPrintf(lpszDate, sizeof(lpszDate), L"%04d-%02d-%02d ~ %04d-%02d-%02d", st.wYear, st.wMonth, st.wDay, st.wYear, st.wMonth, st.wDay);
+										}else{
+											StringCbPrintf(lpszDate, sizeof(lpszDate), L"%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+										}
+
+										SetWindowText(hWnd, lpszDate);
+									}
+								}
+
+								if(VKCode == VK_TAB){
+									if(GetKeyState(VK_LSHIFT) & 0x8000){
+										SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)0, (LPARAM)hWnd);
+									}else{
+										SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)1, (LPARAM)hWnd);
+									}
+								}else if(VKCode == VK_DOWN){
+									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)2, (LPARAM)hWnd);
+								}else if(VKCode == VK_UP){
+									SendMessage(GetParent(hWnd), WM_CHANGEFOCUS, (WPARAM)3, (LPARAM)hWnd);
+								}
+							}
 						}
 						return 0;
 				}
@@ -1092,6 +1232,7 @@ LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lPa
 
 		case WM_CREATE:
 			cs = (CREATESTRUCT*)lParam;
+			if(IDC_EDDATE == (INT_PTR)GetDlgCtrlID(hWnd)){ DateWnd = hWnd; }
 	}
 
 	return CallWindowProc(OldEditProc, hWnd, iMessage, wParam, lParam);
@@ -1131,10 +1272,18 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 					GetDlgItemText(_hWnd, (INT_PTR)(IDC_EDPRIORITY + i), lpszDlgItems[i], 256);
 				}
 				RegisterItem(hListView, LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM /*| LVIF_STATE*/, 0, 0, lpszDlgItems);
+				SetWindowText(hControls[nStaticItems + nEditItems - 1], L"");
 			}
 			break;
 
 		case IDC_BTNDELETE:
+			{
+				int Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
+				while(Index != -1){
+					ListView_DeleteItem(hListView, Index);
+					Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
+				}
+			}
 			break;
 	}
 
@@ -1161,9 +1310,9 @@ int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	LeftValueLength		= wcslen(lpszLT);
 	RightValueLength	= wcslen(lpszRT);
 
+	// TODO: 날짜 서식 지정 완료, 포맷 비교 후 정렬 연산 수행
 	if(LeftValueLength != RightValueLength){
-		// TODO: 날짜 서식 지정 후 비교 연산 수행
-		#define min(a,b) (((a)<(b)) ? (a) : (b))
+		
 		LeftValue	= _wtoi(lpszLT);
 		RightValue	= _wtoi(lpszRT);
 	}else{
@@ -1253,7 +1402,6 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 			return 0;
 
 		case LVN_GETINFOTIP:
-			// TODO: 디버깅 및 툴팁 출력(완료)
 			if(hdr->hwndFrom == hListView){
 				WCHAR	lpszCat[256],
 						lpszToolTipText[256],
@@ -1298,7 +1446,6 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 			break;
 
 		case LVN_COLUMNCLICK:
-			// TODO: 콜백함수나 직접 정렬 코드 작성(완료)
 			lv			= (LPNMLISTVIEW)lParam;
 			// ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
 			ListView_SortItemsEx(hListView, (PFNLVCOMPARE)CompareEx, lv);
@@ -1393,51 +1540,6 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 		RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, HeaderName[i], i);
 	}
 
-	/*
-	// 디버깅용 기본 항목 추가 - 사용 후 삭제 필요
-	LVITEM li;
-
-	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
-	li.pszText		= L"1";
-	li.iItem		= 0;
-	li.iSubItem		= 0;
-	int idx = ListView_InsertItem(hListView, &li);
-
-	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
-	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
-	ListView_SetItemText(hListView, idx, 3, L"수면");
-	
-	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
-	li.pszText		= L"2";
-	li.iItem		= 0;
-	li.iSubItem		= 0;
-	idx = ListView_InsertItem(hListView, &li);
-
-	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
-	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
-	ListView_SetItemText(hListView, idx, 3, L"공부");
-
-	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
-	li.pszText		= L"3";
-	li.iItem		= 0;
-	li.iSubItem		= 0;
-	idx = ListView_InsertItem(hListView, &li);
-
-	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
-	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
-	ListView_SetItemText(hListView, idx, 3, L"운동");
-
-	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
-	li.pszText		= L"4";
-	li.iItem		= 0;
-	li.iSubItem		= 0;
-	idx = ListView_InsertItem(hListView, &li);
-
-	ListView_SetItemText(hListView, idx, 1, L"해야될 일");
-	ListView_SetItemText(hListView, idx, 2, L"2025-02-09");
-	ListView_SetItemText(hListView, idx, 3, L"복습");
-	*/
-
 	// 스태틱
 	for(int i=0; i<nStaticItems; i++){
 		hControls[i] = CreateWindow(L"static", NULL, WS_CHILD | WS_VISIBLE | SS_LEFT, 0,0,0,0, _hWnd, (HMENU)-1, GetModuleHandle(NULL), NULL);
@@ -1462,6 +1564,14 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	}
 
 	SetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE, GetWindowLongPtr(hControls[nStaticItems + 0], GWL_STYLE) | ES_NUMBER);
+
+	// 기본 날짜 포맷
+	SYSTEMTIME st;
+	GetLocalTime(&st);
+	WCHAR DATE[256];
+	StringCbPrintf(DATE, sizeof(DATE), L"%04d-%02d-%02d", st.wYear, st.wMonth, st.wDay);
+	SetWindowText(hControls[nStaticItems + nEditItems - 2], DATE);
+	SendMessage(hControls[nStaticItems + nEditItems - 2], EM_LIMITTEXT, (WPARAM)23, 0);
 
 	// 버튼
 	GetClassInfo(NULL, L"button", &wc);
@@ -1532,7 +1642,6 @@ LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 		ListViewWidth	= crt.right - crt.left;
 		ListViewHeight	= crt.bottom - crt.top;
 
-		// TODO: 위치 및 크기 설정
 		HDWP hdwpStatic = BeginDeferWindowPos(nStaticItems);
 		for(int i=0; i<nEditItems; i++){
 			GetWindowRect(hListView, &wrt);
