@@ -58,7 +58,6 @@
 
 #define WM_CHANGEFOCUS		WM_USER + 1
 
-#define min(a,b) (((a)<(b)) ? (a) : (b))
 #define TEMPLATE_DATE			L"****-**-**"
 #define TEMPLATE_DATE_UNTIL		L"****-**-** ~ ****-**-**"
 
@@ -1298,26 +1297,58 @@ int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	LPNMLISTVIEW lv		= (LPNMLISTVIEW)lParamSort;
 	HWND hListView		= lv->hdr.hwndFrom;
 
-	ListView_GetItemText(hListView, lParam1, IDC_EDDATE - IDC_EDPRIORITY, lpszLT, 256);
-	ListView_GetItemText(hListView, lParam2, IDC_EDDATE - IDC_EDPRIORITY, lpszRT, 256);
+	ListView_GetItemText(hListView, lParam1, (int)(IDC_EDDATE - IDC_EDPRIORITY), lpszLT, 256);
+	ListView_GetItemText(hListView, lParam2, (int)(IDC_EDDATE - IDC_EDPRIORITY), lpszRT, 256);
 
-	int	MinLength,
+	int	Compare,
 		LeftValue,
 		RightValue,
 		LeftValueLength,
-		RightValueLength;
+		RightValueLength,
+		TemplateDateLength,
+		TemplateDateUntilLength;
 
-	LeftValueLength		= wcslen(lpszLT);
-	RightValueLength	= wcslen(lpszRT);
+	LeftValueLength			= wcslen(lpszLT);
+	RightValueLength		= wcslen(lpszRT);
+	TemplateDateLength		= wcslen(TEMPLATE_DATE);
+	TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL);
 
 	// TODO: 날짜 서식 지정 완료, 포맷 비교 후 정렬 연산 수행
 	if(LeftValueLength != RightValueLength){
-		
-		LeftValue	= _wtoi(lpszLT);
-		RightValue	= _wtoi(lpszRT);
+		CONST WCHAR	*Separators = L" ~ ";
+		WCHAR		*LongString = (((LeftValueLength) < (RightValueLength)) ? lpszRT : lpszLT),
+					*ShortString= (((LeftValueLength) < (RightValueLength)) ? lpszLT : lpszRT),
+					*ptr		= wcstok(LongString, Separators);
+
+		Compare = 0;
+		while(ptr != NULL && Compare == 0){
+			Compare = wcscmp(ptr, ShortString);
+			if(Compare < 0){
+				LeftValue = -1;
+				RightValue = 1;
+			}
+			else if(Compare > 0){
+				LeftValue = 1;
+				RightValue = -1;
+			}else{
+				ptr = wcstok(NULL, Separators);
+			}
+		}
+		if(Compare == 0){ LeftValue = RightValue = 0; }
+
 	}else{
-		LeftValue	= _wtoi(lpszLT);
-		RightValue	= _wtoi(lpszRT);
+		Compare = 0;
+		WCHAR *lPtr = lpszLT, *rPtr = lpszRT;
+		while(Compare == 0 && *rPtr){
+			Compare = *lPtr++ - *rPtr++;
+		}
+
+		int Positive = (Compare > 0);
+		int Negative = (Compare < 0);
+
+		if((Positive - Negative) == 0)	{ LeftValue =		RightValue = 0; }
+		if((Positive - Negative) > 0)	{ LeftValue = 1;	RightValue = -1; }
+		if((Positive - Negative) < 0)	{ LeftValue = -1;	RightValue = 1; }
 	}
 
 	if(LeftValue == RightValue){
