@@ -64,6 +64,10 @@
 void CenterWindow(HWND hWnd);
 BOOL CheckLeapYear(int Year);
 // BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
+BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, DWORD dwType, PVOID Data, size_t Size);
+DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return);
+void SavePosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath);
+void LoadPosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath);
 
 int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
@@ -758,10 +762,12 @@ class MainWindow : public BaseWindow<MainWindow> {
 		{WM_SETFOCUS, &MainWindow::OnSetFocus},
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
 		{WM_CHANGEFOCUS, &MainWindow::OnChangeFocus},
+        {WM_ACTIVATEAPP, &MainWindow::OnActivateApp},
         {WM_CREATE, &MainWindow::OnCreate},
         {WM_DESTROY, &MainWindow::OnDestroy},
     };
 
+	int bInit = TRUE;
 	int ListViewWidth;
 	int ListViewHeight;
 	const int ThickFrame = 3;
@@ -771,6 +777,17 @@ class MainWindow : public BaseWindow<MainWindow> {
 	HWND hListView, hCalendar, hControls[nControls];
 	INITCOMMONCONTROLSEX icex;
 	HMENU hMenu, hPopupMenu, hPopupView;
+
+	// 드래그 앤 드롭 - 추후 필요시 확장
+	//int			iDrag,
+	//				iTarget,
+	//				iOldTarget = -1;
+	//
+	//BOOL			bDrag;
+	//RECT			ItemRect;
+	//POINT			HotSpot,
+	//				Mouse;
+	//HIMAGELIST	hImg;
 
 private:
     LPCWSTR ClassName() const { return L"Example ToDoList Windows Program"; }
@@ -789,6 +806,7 @@ private:
 	LRESULT OnLButtonUp(WPARAM wParam, LPARAM lParam);
 
     LRESULT OnChangeFocus(WPARAM wParam, LPARAM lParam);
+    LRESULT OnActivateApp(WPARAM wParam, LPARAM lParam);
     LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
     LRESULT OnDestroy(WPARAM wParam, LPARAM lParam);
     // LRESULT OnExitResizeMove(WPARAM wParam, LPARAM lParam);
@@ -912,6 +930,11 @@ BOOL MainWindow::RegisterItem(HWND hListView, UINT Mask, int RowIndex, int Colum
 	LI.pszText	= (LPWSTR)TextItems[0];
 	if((Mask & LVIF_PARAM) == LVIF_PARAM){
 		// LI.lParam = (LPARAM)LI.pszText;
+	}
+
+	if((Mask & LVIF_IMAGE) == LVIF_IMAGE){
+		// 드래그 앤 드롭 - 추후 필요시 확장
+		LI.iImage = 1;
 	}
 
 	idx = ListView_InsertItem(hListView, &LI);
@@ -1421,6 +1444,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 	LPNMITEMACTIVATE	activate;
 
 	LVCOLUMN			Column;
+	POINT				Mouse;
 	int					ItemCount;
 
 	hdr			= (LPNMHDR)lParam;
@@ -1567,10 +1591,10 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	AppendMenu(hPopupView, MF_STRING, ID_VIEW_DRAGDROP, L"세부항목 이동(&D)");
 	SetMenu(_hWnd, hMenu);
 
-	hListView	= CreateWindow(
+	hListView		= CreateWindow(
 			WC_LISTVIEW,
 			NULL,
-			WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT, // LVS_SORTASCENDING
+			WS_CHILD | WS_VISIBLE | WS_BORDER | LVS_REPORT | LVS_SHOWSELALWAYS, // LVS_SORTASCENDING
 			0,0,0,0,
 			_hWnd,
 			NULL,
@@ -1587,7 +1611,7 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 			LVS_EX_INFOTIP |
 			LVS_EX_LABELTIP |
 			LVS_EX_TRACKSELECT
-			/*| LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT | LVS_EX_UNDERLINECOLD*/
+			// | LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT | LVS_EX_UNDERLINECOLD
 			);
 
 	// unit: ms, -1(System Default)
@@ -1640,7 +1664,7 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 	SendMessage(hControls[nStaticItems + 2], EM_LIMITTEXT, (WPARAM)23, 0);								// 날짜 서식 최대 길이로 범위를 제한한다.
 
 	// ToDo
-	// 기본적으로 리스트 뷰 컨트롤에 문자열 최대 허용 길이가 설정되어 있다.
+	// 기본적으로 리스트 뷰 컨트롤에 문자열 최대 허용 길이가 설정되어 있다(ANSI : 256, UNICODE : 128).
 	// 해당 프로젝트에서는 오너 드로우 리스트 뷰 컨트롤을 사용할 필요가 없으므로 변경하지 않기로 한다.
 	SendMessage(hControls[nStaticItems + 3], EM_LIMITTEXT, (WPARAM)128 - (23 + 32 + 9), 0);				// 리스트 뷰 컨트롤의 최대 허용 길이로 범위를 제한한다.
 
@@ -1677,6 +1701,7 @@ LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
 	RemoveProp(_hWnd, L"CallBackEditWndProc");
 	RemoveProp(_hWnd, L"CallBackButtonWndProc");
 
+	SavePosition(_hWnd, HKEY_CURRENT_USER, L"SoftWare\\SicSoft\\InitInfo\\LastPosition");
     PostQuitMessage(0);
     return 0;
 }
@@ -1799,6 +1824,17 @@ LRESULT MainWindow::OnLButtonUp(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
 
+LRESULT MainWindow::OnActivateApp(WPARAM wParam, LPARAM lParam){
+	if(wParam == TRUE){
+		if(bInit){
+			bInit = FALSE;
+			LoadPosition(_hWnd, HKEY_CURRENT_USER, L"SoftWare\\SicSoft\\InitInfo\\LastPosition");
+		}
+	}
+
+	return 0;
+}
+
 /*	// 수행시간이 길어진다
 BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To){
 	int		i = 0,
@@ -1840,3 +1876,133 @@ BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To){
 }
 */
 
+BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, DWORD dwType, PVOID Data, size_t Size){
+	LONG	ret;
+	HKEY	hSubKey;
+	DWORD	dwDisposition;
+
+	ret = RegCreateKeyEx(
+			hParentKey,
+			lpszPath,
+			0,						// Reserved
+			NULL,					// Class
+			0,						// REG_OPTION_NON_VOLAILE
+			dwDesired,
+			NULL,					// LPSECURITY_ATTRIBUTES(Inherit)
+			&hSubKey,
+			&dwDisposition			// REG_CREATE_NEW_KEY, REG_OPENED_EXISTING_KEY
+	);
+	
+	// lpszKeyName이 NULL이면 키 이름(=Value)은 "(기본값)"으로 설정된다.
+	if(hSubKey){
+		ret = RegSetValueEx(
+				hSubKey,
+				lpszKeyName,
+				0, // Reserved
+				dwType,
+				(CONST BYTE*)Data,
+				Size
+		);
+
+		RegCloseKey(hSubKey);
+	}
+
+	return (BOOL)(ret == ERROR_SUCCESS);
+}
+
+//	REG_SZ:								null-terminated string (문자열)
+//	REG_MULTI_SZ:						multiple null-terminated strings (여러 null-terminated 문자열)
+//	REG_EXPAND_SZ:						null-terminated string that can include environment variables (환경 변수를 포함할 수 있는 null-terminated 문자열)
+//	REG_DWORD:							32-bit number (32비트 숫자)
+//	REG_QWORD:							64-bit number (64비트 숫자)
+//	REG_BINARY:							binary data (이진 데이터)
+//	REG_NONE:							no defined value type (정의되지 않은 값 타입)
+//	REG_LINK:							symbolic link (시스템 링크)
+//	REG_RESOURCE_LIST:					resource list (자원 목록)
+//	REG_FULL_RESOURCE_DESCRIPTOR:		full resource descriptor (자원 설명자)
+//	REG_RESOURCE_REQUIREMENTS_LIST:		resource requirements list (자원 요구 사항 목록)
+
+DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return){
+	LONG ret;
+	DWORD dwType, dwcbData;
+
+	HKEY	hSubKey;
+	DWORD	dwDisposition;
+
+	ret = RegOpenKeyEx(
+			hParentKey,
+			lpszPath,
+			0,				 // ulOptions
+			dwDesired,
+			&hSubKey
+	);
+
+	//
+	// ret = RegCreateKeyEx(
+	//		ParentKey,
+	//		lpszPath,
+	//		0,						// Reserved
+	//		NULL,					// Class
+	//		0,						// REG_OPTION_NON_VOLAILE
+	//		dwDesired,
+	//		NULL,					// LPSECURITY_ATTRIBUTES(Inherit)
+	//		&hSubKey,
+	//		&dwDisposition			// REG_CREATE_NEW_KEY, REG_OPENED_EXISTING_KEY
+	// );
+
+	// Get Type & cb
+	// 버퍼를 지정했는데 크기가 충분하지 않으면 ERROR_MORE_DATA를 반환하고 필요한 버퍼 크기를 dwcbData에 저장한다.
+	// 버퍼를 지정하지 않고 마지막 인수인 dwcbData를 지정한 경우 ERROR_SUCCESS를 반환하고 데이터 크기를 dwcbData에 바이트 단위로 저장한다.
+	// lpszKeyName이 레지스트리에 없으면 ERROR_FILE_NOT_FOUND를 반환하고 버퍼에 아무런 값도 저장하지 않는다.
+	if(hSubKey){
+		ret = RegQueryValueEx(hSubKey, lpszKeyName, 0, &dwType, (LPBYTE)Return, &dwcbData);
+		RegCloseKey(hSubKey);
+	}
+
+	return (((ret) == ERROR_SUCCESS) ? (dwType) : REG_NONE);
+}
+
+void SavePosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath){
+	WINDOWPLACEMENT WindowPlacement = {
+		.length = sizeof(WINDOWPLACEMENT),
+	};
+
+	GetWindowPlacement(hWnd, &WindowPlacement);
+	WriteRegistryData(hKey, lpszPath, KEY_WRITE, L"CurrentState", REG_DWORD, &WindowPlacement.showCmd, sizeof(UINT));
+	WriteRegistryData(hKey, lpszPath, KEY_WRITE, L"Left", REG_DWORD, &WindowPlacement.rcNormalPosition.left, sizeof(LONG));
+	WriteRegistryData(hKey, lpszPath, KEY_WRITE, L"Top", REG_DWORD, &WindowPlacement.rcNormalPosition.top, sizeof(LONG));
+	WriteRegistryData(hKey, lpszPath, KEY_WRITE, L"Right", REG_DWORD, &WindowPlacement.rcNormalPosition.right, sizeof(LONG));
+	WriteRegistryData(hKey, lpszPath, KEY_WRITE, L"Bottom", REG_DWORD, &WindowPlacement.rcNormalPosition.bottom, sizeof(LONG));
+}
+
+void LoadPosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath){
+	RECT DefaultRect;
+
+	WINDOWPLACEMENT WindowPlacement = {
+		.length = sizeof(WINDOWPLACEMENT),
+		.flags = 0,
+	};
+
+	SetRect(&DefaultRect, 30,30, 1024, 480);
+
+	DWORD dwType;
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"CurrentState", &WindowPlacement.showCmd);
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Left", &WindowPlacement.rcNormalPosition.left);
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Top", &WindowPlacement.rcNormalPosition.top);
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Right", &WindowPlacement.rcNormalPosition.right);
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Bottom", &WindowPlacement.rcNormalPosition.bottom);
+
+	if(dwType == REG_NONE){
+		WindowPlacement.showCmd = SW_SHOW;
+		CopyRect(&WindowPlacement.rcNormalPosition, &DefaultRect);
+	}
+
+	if(WindowPlacement.showCmd == SW_SHOWMINIMIZED){
+		WindowPlacement.showCmd = SW_RESTORE;
+	}
+
+	WindowPlacement.ptMinPosition.x = WindowPlacement.ptMinPosition.y = 0;
+	WindowPlacement.ptMaxPosition.x = WindowPlacement.ptMaxPosition.y = 0;
+
+	SetWindowPlacement(hWnd, &WindowPlacement);
+}
