@@ -38,6 +38,9 @@
 #include <windows.h>
 #include <commctrl.h>
 #include <strsafe.h>
+#include <shlobj.h>
+#include <KnownFolders.h>
+#include <comdef.h>
 
 #define ID_VIEW_CHECKBOX	13100
 #define ID_VIEW_GRIDLINE	13101
@@ -61,6 +64,12 @@
 #define TEMPLATE_DATE			L"****-**-**"
 #define TEMPLATE_DATE_UNTIL		L"****-**-** ~ ****-**-**"
 
+// 파일 저장 형식 설정 및 데이터 읽고 쓰기
+typedef struct tag_FileHeader{
+	int		Version;
+	WCHAR	lpszHeader[32];
+} FileHeader;
+
 void CenterWindow(HWND hWnd);
 BOOL CheckLeapYear(int Year);
 // BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
@@ -72,11 +81,6 @@ void LoadPosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath);
 int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
-
-struct tag_Arguments{
-	int Priority;
-	WCHAR buf[256];
-};
 
 // Encapsulation
 template <class DERIVED_TYPE>
@@ -738,7 +742,7 @@ class MainWindow : public BaseWindow<MainWindow> {
 	static const int nButtonItems	= 2;
 	static const int nControls		= nStaticItems + nEditItems + nButtonItems;
 	static const WCHAR* HeaderName[nHeaders];
-	static BOOL CheckBox, GridLine, RowSelect, DragDrop;
+	static BOOL CheckBox, GridLine, RowSelect, DragDrop, bModify;
 
     typedef struct tag_MSGMAP {
         UINT iMessage;
@@ -763,6 +767,8 @@ class MainWindow : public BaseWindow<MainWindow> {
         // {WM_EXITSIZEMOVE, &MainWindow::OnExitResizeMove},
 		{WM_CHANGEFOCUS, &MainWindow::OnChangeFocus},
         {WM_ACTIVATEAPP, &MainWindow::OnActivateApp},
+        {WM_QUERYENDSESSION, &MainWindow::OnQueryEndSession},
+        {WM_CLOSE, &MainWindow::OnClose},
         {WM_CREATE, &MainWindow::OnCreate},
         {WM_DESTROY, &MainWindow::OnDestroy},
     };
@@ -807,6 +813,8 @@ private:
 
     LRESULT OnChangeFocus(WPARAM wParam, LPARAM lParam);
     LRESULT OnActivateApp(WPARAM wParam, LPARAM lParam);
+    LRESULT OnQueryEndSession(WPARAM wParam, LPARAM lParam);
+    LRESULT OnClose(WPARAM wParam, LPARAM lParam);
     LRESULT OnCreate(WPARAM wParam, LPARAM lParam);
     LRESULT OnDestroy(WPARAM wParam, LPARAM lParam);
     // LRESULT OnExitResizeMove(WPARAM wParam, LPARAM lParam);
@@ -814,6 +822,7 @@ private:
 private:
 	BOOL RegisterHeader(HWND hListView, UINT Mask, int Format, int Width, LPCWSTR HeaderName, int Index);
 	BOOL RegisterItem(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, WCHAR (*InputItems)[256]); 
+	BOOL SaveToFile();
 
 public:
     MainWindow();
@@ -826,7 +835,8 @@ public:
 BOOL MainWindow::CheckBox		= FALSE,
 	 MainWindow::GridLine		= FALSE,
 	 MainWindow::RowSelect		= FALSE,
-	 MainWindow::DragDrop		= FALSE;
+	 MainWindow::DragDrop		= FALSE,
+	 MainWindow::bModify		= FALSE;
 
 const WCHAR* MainWindow::HeaderName[] = {
 	L"우선순위",
@@ -874,6 +884,8 @@ MainWindow::~MainWindow() {
 // MainThread
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     MainWindow win;
+	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	if(FAILED(hr)){ return E_FAIL; }
 
     if(!win.Create(L"ToDoList", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN)){ return 0; }
 
@@ -886,6 +898,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		DispatchMessage(&msg);
 	}
 
+	CoUninitialize();
     return (int)msg.wParam;
 }
 
@@ -944,6 +957,65 @@ BOOL MainWindow::RegisterItem(HWND hListView, UINT Mask, int RowIndex, int Colum
 		ListView_SetItemText(hListView, idx, ColumnIndex + i, TextItems[i]);
 		i++;
 	}
+
+	return TRUE;
+}
+
+BOOL MainWindow::SaveToFile(){
+	// 보호된 폴더 설정으로 인해 접근 불가한 경우가 발생함
+	// hr = SHGetKnownFolderPath(FOLDERID_Documents, 0, NULL, &lpszDocumentsPath);
+	
+	HRESULT hr;
+	WCHAR lpszDocumentsPath[MAX_PATH];
+	DWORD Length = GetCurrentDirectory(MAX_PATH, lpszDocumentsPath);
+	if(Length == 0 || Length >= MAX_PATH){ return FALSE; }
+
+	LPCWSTR FileName = L"\\TDLDATA.dat";
+
+	WCHAR lpszResourcePath[MAX_PATH];
+	StringCbCopy(lpszResourcePath, sizeof(lpszResourcePath), lpszDocumentsPath);
+	hr = StringCchCat(lpszResourcePath, sizeof(lpszResourcePath) / sizeof(lpszResourcePath[0]), FileName);
+	if(FAILED(hr)){ return FALSE; }
+
+	HANDLE hFile = CreateFile(lpszResourcePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile == INVALID_HANDLE_VALUE){ return FALSE; }
+
+	// 직접 읽을 수 있는 파일로 만들려면 BOM 추가
+	// 유니코드 포맷으로 작성 BOM(Byte Order Mark) - LE
+	DWORD dwWritten;
+	// unsigned short BOM = 0xFEFF;
+	// WriteFile(hFile, &BOM, sizeof(BOM), &dwWritten, NULL);
+
+	FileHeader Header;
+	Header.Version = 100;
+	StringCbCopy(Header.lpszHeader, sizeof(Header.lpszHeader), L"ToDoList Data File");
+
+	// 헤더 추가
+	WriteFile(hFile, &Header, sizeof(Header), &dwWritten, NULL);
+
+	// 정보 조립
+	WCHAR Priority[32];
+	WCHAR Category[32];
+	WCHAR Date[32];
+	WCHAR ToDo[128];
+	WCHAR Format[256];
+
+	int nItems = ListView_GetItemCount(hListView);
+	for(int i=0; i<nItems; i++){
+		ListView_GetItemText(hListView, i, 0, Priority, 32);
+		ListView_GetItemText(hListView, i, 1, Category, 32);
+		ListView_GetItemText(hListView, i, 2, Date, 32);
+		ListView_GetItemText(hListView, i, 3, ToDo, 128);
+
+		StringCbPrintf(Format, sizeof(Format), L"\r\n%s,%s,%s,%s", Priority, Category, Date, ToDo);
+		// 실제 데이터
+		WriteFile(hFile, Format, sizeof(WCHAR) * wcslen(Format), &dwWritten, NULL);
+	}
+
+	CloseHandle(hFile);
+	bModify = FALSE;
+
+	// if(lpszDocumentsPath){ CoTaskMemFree(lpszDocumentsPath); }
 
 	return TRUE;
 }
@@ -1295,16 +1367,18 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 				}
 				RegisterItem(hListView, LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM /*| LVIF_STATE*/, 0, 0, lpszDlgItems);
 				SetWindowText(hControls[nStaticItems + nEditItems - 1], L"");
+				bModify = TRUE;
 			}
 			break;
 
 		case IDC_BTNDELETE:
-			{
+			if(HIWORD(wParam) == BN_CLICKED){
 				int Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
 				while(Index != -1){
 					ListView_DeleteItem(hListView, Index);
 					Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
 				}
+				bModify = TRUE;
 			}
 			break;
 	}
@@ -1489,7 +1563,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 
 				}
 			}
-			break;
+			return 0;
 
 		case LVN_ITEMCHANGED:
 			// 텍스트나 이미지의 변경, 포커스를 잃거나 선택 상태가 변경될 때 매번 보내진다.
@@ -1528,7 +1602,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 				free(lpszToDoText);
 				*/
 			}
-			break;
+			return 0;
 
 		case LVN_COLUMNCLICK:
 			lv			= (LPNMLISTVIEW)lParam;
@@ -1572,7 +1646,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 				}
 			}
 			*/
-			break;
+			return 0;
 	}
 
 	return DefWindowProc(_hWnd, WM_NOTIFY, wParam, lParam);
@@ -1706,6 +1780,38 @@ LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
+LRESULT MainWindow::OnQueryEndSession(WPARAM wParam, LPARAM lParam){
+	if(lParam & ENDSESSION_LOGOFF){
+		// 단순 로그오프는 아무런 처리도 하지 않는다.
+
+	}else{	// CLOSEAPP, CRITICAL
+		// 미저장 문서 확인
+		if(bModify){
+			// 자동 저장
+			SaveToFile();
+		}
+	}
+
+	return TRUE;
+}
+
+LRESULT MainWindow::OnClose(WPARAM wParam, LPARAM lParam){
+	if(bModify){
+		int ret = MessageBox(_hWnd, L"변경 사항을 저장하시겠습니까?", L"ToDoList", MB_ICONINFORMATION | MB_YESNOCANCEL);
+
+		// 종료 취소
+		if(ret == IDCANCEL){ return 0; }
+
+		if(ret == IDYES){
+			// 저장
+			SaveToFile();
+		}
+	}
+
+	DestroyWindow(_hWnd);
+	return 0;
+}
+
 LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 	DWORD dwStyle, dwExStyle;
 	RECT srt, crt, wrt;
@@ -1717,10 +1823,15 @@ LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 		StaticWidth,
 		StaticHeight	= 20,
 		ButtonWidth,
-		ButtonHeight	= 20;
+		ButtonHeight	= 20,
+		ClientWidth,
+		ClientHeight;
 
     if (wParam != SIZE_MINIMIZED) {
 		GetClientRect(_hWnd, &crt);
+
+		ClientWidth		= crt.right - crt.left;
+		ClientHeight	= crt.bottom - crt.top;
 		InflateRect(
 				&crt, 
 				(-((crt.right - crt.left) * 0.2f)),
@@ -1775,8 +1886,7 @@ LRESULT MainWindow::OnSize(WPARAM wParam, LPARAM lParam) {
 			hdwpButton	= DeferWindowPos(hdwpButton, hControls[nStaticItems + nEditItems + j], NULL, x, y, ButtonWidth, ButtonHeight, SWP_NOZORDER);
 		}
 		EndDeferWindowPos(hdwpButton);
-    }
-
+	}
     return 0;
 }
 
@@ -1829,6 +1939,7 @@ LRESULT MainWindow::OnActivateApp(WPARAM wParam, LPARAM lParam){
 		if(bInit){
 			bInit = FALSE;
 			LoadPosition(_hWnd, HKEY_CURRENT_USER, L"SoftWare\\SicSoft\\InitInfo\\LastPosition");
+			// 파일 불러오기
 		}
 	}
 
