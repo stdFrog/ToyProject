@@ -1,46 +1,34 @@
-///////////////////////////////// COMMENT /////////////////////////////////////
+/////////////////////////////////////////////COMENT//////////////////////////////////////////////////
 // C언어로 네트워크 통신 예시 프로그램을 만들었다.
 // gnu 환경에서는 구조적 예외 처리 구문도 사용할 수 없기 때문에 상당히 불편하다.
 // 예외 처리 구문을 사용할 수 있을 때와 아닐 때의 차이가 크며
 // 불필요한 분기가 생겨날 수 있기 때문에 C++ 포맷과 C++ 컴파일러를 사용하기로 한다.
 // 또한 캡슐화를 이용해 프로시저를 숨기고 전역 변수를 마음껏 사용하도록 하자.
 // 요약하면 편하게 코딩하자는 뜻이다.
-///////////////////////////////////////////////////////////////////////////////
-// 이번 프로젝트에서는 리스트 뷰를 이용하여 초보 개발자들의 단골 소재인
-// ToDoList 프로그램을 만든다.
+/////////////////////////////////////////////COMENT//////////////////////////////////////////////////
+// 이번 프로젝트에서는 리스트 뷰를 이용하여 초보 개발자들의 단골 소재인 ToDoList 프로그램을 만든다.
 // 실상 HTML과 CSS, JavaScript를 이용한 이쁜 TodoList가 많이 있어서
 // C++과 API로 만드는 경우는 거의 없다.
 // 간단한 예시 프로그램이라고는 하지만 직접 사용할 예정이므로 꽤 신경쓸 예정이다.
-///////////////////////////////// COMMENT /////////////////////////////////////
+/////////////////////////////////////////////COMENT//////////////////////////////////////////////////
 // 리스트 뷰 컨트롤은 여러 가지 세부 항목을 가질 수 있으며
 // 하나의 대상을 연속된 정보로 표현할 때 흔히 사용된다.
 // 비슷한 예로 DB의 레코드를 떠올릴 수 있는데 실제로 유사하며
 // DB프로그램을 만들 때 많이 사용되었던 컨트롤이다.
-///////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////COMENT//////////////////////////////////////////////////
 // 리스트 뷰 컨트롤은 대상에 대한 2차원적인 정보를 보여주는데에 적합하며
 // 98과 NT시절부터 사용되었기 때문에 굉장히 많은 기능을 갖고 있다.
-// 사실상 프로그래밍 하기는 가장 어려운 컨트롤이므로 꼭 필요한 기능을 제외하곤
-// 추가하지 않기로 한다.
-///////////////////////////////// COMMENT /////////////////////////////////////
-
-// Debug : 문자열의 좌상단 좌표를 0,0으로 맞췄을 때 비트맵의 좌상단(0,0)에 출력된다.
-//	{
-//		WCHAR buf[256];
-//		StringCbPrintf(buf, sizeof(buf), L"ComboBox Client Rect = (%d,%d,%d,%d)", ComboBoxRect.left, ComboBoxRect.top, ComboBoxRect.right, ComboBoxRect.bottom);
-//		// TextOut(hMemDC, 0,0, buf, wcslen(buf));
-//	}
-
-// ListView_GetItemCount(hListView);
-// ListView_InsertItem(hList, &LI);
+// 사실상 프로그래밍 하기는 가장 어려운 컨트롤이므로 꼭 필요한 기능을 제외하곤 추가하지 않기로 한다.
+/////////////////////////////////////////////COMENT//////////////////////////////////////////////////
 
 #define _WIN32_WINNT 0x0A00
-//#define UNICODE				// 컴파일 옵션으로 유니코드 문자셋 지정
+// #define UNICODE				// 컴파일 옵션으로 유니코드 문자셋 지정
 #include <windows.h>
 #include <commctrl.h>
 #include <strsafe.h>
-#include <shlobj.h>
-#include <KnownFolders.h>
-#include <comdef.h>
+// #include <shlobj.h>
+// #include <KnownFolders.h>
+// #include <comdef.h>
 
 #define ID_VIEW_CHECKBOX	13100
 #define ID_VIEW_GRIDLINE	13101
@@ -61,26 +49,30 @@
 
 #define WM_CHANGEFOCUS		WM_USER + 1
 
-#define TEMPLATE_DATE			L"****-**-**"
-#define TEMPLATE_DATE_UNTIL		L"****-**-** ~ ****-**-**"
+#define TEMPLATE_DATE		L"****-**-**"
+#define TEMPLATE_DATE_UNTIL	L"****-**-** ~ ****-**-**"
+
+#define KEY_PATH_DATA		L"Software\\SicSoft\\InitInfo\\LastData"
+#define KEY_PATH_POSITION	L"Software\\SicSoft\\InitInfo\\LastPosition"
 
 // 파일 저장 형식 설정 및 데이터 읽고 쓰기
 typedef struct tag_FileHeader{
-	int		Version;
 	WCHAR	lpszHeader[32];
+	int		Version;
+	int		DataSize;
 } FileHeader;
 
 void CenterWindow(HWND hWnd);
 BOOL CheckLeapYear(int Year);
-// BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To);
-BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, DWORD dwType, PVOID Data, size_t Size);
-DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return);
 void SavePosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath);
 void LoadPosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath);
+DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return, DWORD Size);
+BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, DWORD dwType, PVOID Data, size_t Size);
 
 int CALLBACK Compare(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort);
 LRESULT CALLBACK EditSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK ButtonSubProc(HWND hWnd, UINT iMessage, WPARAM wParam, LPARAM lParam);
 
 // Encapsulation
 template <class DERIVED_TYPE>
@@ -583,7 +575,6 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 	#define LIGHTBLUEMIST		0x9AC0CD
 	#define LIGHTCYANBLUE		0xE0FFFF
 
-	// TODO: 매크로 활용
 	HBRUSH hTodayBrush				= CreateSolidBrush(RGB(224,255,255)),
 		   hOldBrush;
 
@@ -648,8 +639,8 @@ void PopupWindow::DrawCalendar(HDC hdc, int cx, int cy){
 	DeleteObject(hTodayBrush);
 	DeleteObject(hPen);
 
-	// TODO: 범위 유효성 검사 - 캘린더 확장 기능 추가시 적용
 	/*
+	// 범위 유효성 검사 - 캘린더 확장 기능 추가시 적용
 	WCHAR	lpszDate[256];
 
 	HWND hDateWnd = FindWindowEx(GetParent(_hWnd), NULL, L"MySubClassingEdit", NULL);
@@ -823,6 +814,7 @@ private:
 	BOOL RegisterHeader(HWND hListView, UINT Mask, int Format, int Width, LPCWSTR HeaderName, int Index);
 	BOOL RegisterItem(HWND hListView, UINT Mask, int RowIndex, int ColumnIndex, WCHAR (*InputItems)[256]); 
 	BOOL SaveToFile();
+	BOOL LoadFile();
 
 public:
     MainWindow();
@@ -884,13 +876,13 @@ MainWindow::~MainWindow() {
 // MainThread
 int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
     MainWindow win;
-	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
-	if(FAILED(hr)){ return E_FAIL; }
+	// HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
+	// if(FAILED(hr)){ return E_FAIL; }
 
     if(!win.Create(L"ToDoList", WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN)){ return 0; }
 
     ShowWindow(win.Window(), nCmdShow);
-	CenterWindow(win.Window());
+	// CenterWindow(win.Window());
 
     MSG msg = { 0 };
     while(GetMessage(&msg, NULL, 0,0)){
@@ -898,7 +890,7 @@ int APIENTRY wWinMain(HINSTANCE hInstance, HINSTANCE, LPWSTR, int nCmdShow) {
 		DispatchMessage(&msg);
 	}
 
-	CoUninitialize();
+	// CoUninitialize();
     return (int)msg.wParam;
 }
 
@@ -980,14 +972,19 @@ BOOL MainWindow::SaveToFile(){
 	HANDLE hFile = CreateFile(lpszResourcePath, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 	if(hFile == INVALID_HANDLE_VALUE){ return FALSE; }
 
+	WriteRegistryData(HKEY_CURRENT_USER, KEY_PATH_DATA, KEY_WRITE, L"DataFilePath", REG_SZ, lpszResourcePath, sizeof(WCHAR) * (wcslen(lpszResourcePath) + 1));
+
 	// 직접 읽을 수 있는 파일로 만들려면 BOM 추가
 	// 유니코드 포맷으로 작성 BOM(Byte Order Mark) - LE
 	DWORD dwWritten;
 	// unsigned short BOM = 0xFEFF;
 	// WriteFile(hFile, &BOM, sizeof(BOM), &dwWritten, NULL);
 
+	int nItems = ListView_GetItemCount(hListView);
+
 	FileHeader Header;
 	Header.Version = 100;
+	Header.DataSize = nItems;
 	StringCbCopy(Header.lpszHeader, sizeof(Header.lpszHeader), L"ToDoList Data File");
 
 	// 헤더 추가
@@ -1000,7 +997,6 @@ BOOL MainWindow::SaveToFile(){
 	WCHAR ToDo[128];
 	WCHAR Format[256];
 
-	int nItems = ListView_GetItemCount(hListView);
 	for(int i=0; i<nItems; i++){
 		ListView_GetItemText(hListView, i, 0, Priority, 32);
 		ListView_GetItemText(hListView, i, 1, Category, 32);
@@ -1016,6 +1012,67 @@ BOOL MainWindow::SaveToFile(){
 	bModify = FALSE;
 
 	// if(lpszDocumentsPath){ CoTaskMemFree(lpszDocumentsPath); }
+
+	return TRUE;
+}
+
+BOOL MainWindow::LoadFile(){
+	WCHAR lpszResourcePath[256];
+
+	DWORD dwType;
+	dwType = ReadRegistryData(HKEY_CURRENT_USER, KEY_PATH_DATA, KEY_READ, L"DataFilePath", lpszResourcePath, sizeof(lpszResourcePath));
+
+	// OpenFile 함수는 유니코드 파일 이름이나 파이프에 대해 지원하지 않는다. ANSI 문자 집합에서만 사용되는 함수이므로 사용할 수 없다.
+	HANDLE hFile = CreateFile(lpszResourcePath, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+	if(hFile == INVALID_HANDLE_VALUE){ return FALSE; }
+
+	DWORD dwRead;
+	// unsigned short BOM;
+	// ReadFile(hFile, &BOM, sizeof(BOM), &dwRead, NULL);
+
+	FileHeader Header;
+	ReadFile(hFile, &Header, sizeof(Header), &dwRead, NULL);
+
+	if(Header.Version == 100 && wcscmp(Header.lpszHeader, L"ToDoList Data File") == 0){
+		DWORD dwFileSize	= GetFileSize(hFile, NULL);
+		if(dwFileSize != INVALID_FILE_SIZE){
+			dwFileSize		-= sizeof(Header);
+			WCHAR *ptr		= (WCHAR*)malloc(dwFileSize + 1);
+			WCHAR *str		= NULL;
+			ReadFile(hFile, ptr, dwFileSize, &dwRead, NULL);
+			ptr[dwRead / sizeof(WCHAR)] = 0;
+
+			WCHAR **ItemText = (WCHAR**)malloc(sizeof(WCHAR*) * Header.DataSize);
+			str = ptr + 2;
+
+			int idx = 0;
+			LPCWSTR Separators_1	= L"\r\n";
+			WCHAR *parse			= wcstok(str, Separators_1);
+			while(parse != NULL){
+				ItemText[idx++]		= parse;
+				parse = wcstok(NULL, Separators_1);
+			}
+
+			WCHAR RegisterText[nHeaders][256];
+			LPCWSTR Separators_2 = L",";
+			for(int i=0; i<Header.DataSize; i++){
+				parse = wcstok(ItemText[i], Separators_2);
+
+				idx = 0;
+				while(parse != NULL && idx < nHeaders){
+					StringCbCopy(RegisterText[idx++], sizeof(RegisterText), parse);
+					parse = wcstok(NULL, Separators_2);
+				}
+
+				RegisterItem(hListView, LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM, 0,0, RegisterText);
+			}
+
+			free(ItemText);
+			free(ptr);
+		}
+	}
+
+	CloseHandle(hFile);
 
 	return TRUE;
 }
@@ -1121,7 +1178,6 @@ LRESULT MainWindow::OnCtlColorStatic(WPARAM wParam, LPARAM lParam){
 }
 
 LRESULT MainWindow::OnSetFocus(WPARAM wParam, LPARAM lParam){
-	SetFocus(hControls[nStaticItems]);
 	return 0;
 }
 
@@ -1374,9 +1430,13 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 		case IDC_BTNDELETE:
 			if(HIWORD(wParam) == BN_CLICKED){
 				int Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
-				while(Index != -1){
-					ListView_DeleteItem(hListView, Index);
-					Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
+				if(Index != -1){
+					while(Index != -1){
+						ListView_DeleteItem(hListView, Index);
+						Index = ListView_GetNextItem(hListView, -1, LVNI_ALL | LVNI_SELECTED);
+					}
+				}else{
+					// TODO: 체크박스 용도 결정 후 필요시 삭제 동작 추가
 				}
 				bModify = TRUE;
 			}
@@ -1410,7 +1470,6 @@ int CALLBACK CompareEx(LPARAM lParam1, LPARAM lParam2, LPARAM lParamSort){
 	TemplateDateLength		= wcslen(TEMPLATE_DATE);
 	TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL);
 
-	// TODO: 날짜 서식 지정 완료, 포맷 비교 후 정렬 연산 수행
 	if(LeftValueLength != RightValueLength){
 		CONST WCHAR	*Separators = L" ~ ";
 		WCHAR		*LongString = (((LeftValueLength) < (RightValueLength)) ? lpszRT : lpszLT),
@@ -1568,7 +1627,7 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 		case LVN_ITEMCHANGED:
 			// 텍스트나 이미지의 변경, 포커스를 잃거나 선택 상태가 변경될 때 매번 보내진다.
 			lv			= (LPNMLISTVIEW)lParam;
-			if(lv->uChanged == LVIF_STATE && lv->uNewState == (LVIS_SELECTED | LVIS_FOCUSED)){
+			if(lv->uChanged & LVIF_STATE && lv->uNewState & (LVIS_SELECTED | LVIS_FOCUSED)){
 				// 첫 번째 항목을 선택한 상태에서 두 번째 항목으로 선택을 변경한다고 가정할 때, 총 세 번의 통지 메시지가 보내진다.
 				// [기존 항목의 선택 해제 -> 기존 항목의 포커스 해제 -> 새로운 항목 선택 & 포커스] 순이며 상세히 알고 있어야 적합한 처리를 할 수 있다.
 				// 해당 항목의 상태가 변경되고 변경된 상태가 선택과 포커스를 동시에 가질 때,
@@ -1602,50 +1661,34 @@ LRESULT MainWindow::OnNotify(WPARAM wParam, LPARAM lParam){
 				free(lpszToDoText);
 				*/
 			}
+			if(lv->uChanged & LVIF_STATE){
+				switch(lv->uNewState & LVIS_STATEIMAGEMASK){
+					case INDEXTOSTATEIMAGEMASK(1):
+						// UnChecked
+						// {
+						//	WCHAR Debug[256];
+						//	StringCbPrintf(Debug, sizeof(Debug), L"UnCheck Item = %d, %d", lv->iItem, lv->iSubItem);
+						//	MessageBox(HWND_DESKTOP, Debug, L"Debug", MB_OK);
+						// }
+						break;
+
+					case INDEXTOSTATEIMAGEMASK(2):
+						// Checked
+						// {
+						//	WCHAR Debug[256];
+						//	StringCbPrintf(Debug, sizeof(Debug), L"Check Item = %d, %d", lv->iItem, lv->iSubItem);
+						//	MessageBox(HWND_DESKTOP, Debug, L"Debug", MB_OK);
+						// }
+						break;
+
+				}
+			}
 			return 0;
 
 		case LVN_COLUMNCLICK:
 			lv			= (LPNMLISTVIEW)lParam;
 			// ListView_SortItems(hListView, (PFNLVCOMPARE)Compare, lv);
 			ListView_SortItemsEx(hListView, (PFNLVCOMPARE)CompareEx, lv);
-
-			/*
-			// 잘못된 로직
-			ItemCount = ListView_GetItemCount(hListView);
-
-			if(ItemCount > 1){
-				int		Index,
-						LeftItem,
-						RightItem,
-						LeftValue,
-						RightValue;
-
-				WCHAR	lpszLT[256],
-						lpszRT[256];
-
-				Index = 0;
-
-				// 1차 순회
-				while(Index < ItemCount - 1){
-					// 두 번째 인수에 검색 시작 위치 지정, -1일 경우 처음부터 검색하며 검색 시작 지점은 검색에서 제외된다.
-					// LeftItem		= ListView_GetNextItem(hListView, Index, LVNI_ALL | LVNI_BELOW);
-					// RightItem	= ListView_GetNextItem(hListView, Index + 1, LVNI_ALL | LVNI_BELOW);
-
-					ListView_GetItemText(hListView, Index, 0, lpszLT, 256);
-					ListView_GetItemText(hListView, Index + 1, 0, lpszRT, 256);
-
-					LeftValue		= _wtoi(lpszLT);
-					RightValue		= _wtoi(lpszRT);
-
-					if(LeftValue > RightValue){
-						// 항목 번호는 내부적으로 관리하기 때문에 한 항목에 대해서만 순서를 변경하면 된다.
-						MoveToIndex(hListView, nHeaders, Index+1, Index);
-					}
-
-					Index++;
-				}
-			}
-			*/
 			return 0;
 	}
 
@@ -1680,21 +1723,22 @@ LRESULT MainWindow::OnCreate(WPARAM wParam, LPARAM lParam) {
 			hListView,
 			LVS_EX_FULLROWSELECT |
 			LVS_EX_GRIDLINES |
-			LVS_EX_CHECKBOXES |
 			LVS_EX_HEADERDRAGDROP |
-			LVS_EX_INFOTIP |
-			LVS_EX_LABELTIP |
-			LVS_EX_TRACKSELECT
-			// | LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT | LVS_EX_UNDERLINECOLD
+			LVS_EX_INFOTIP
+			// LVS_EX_CHECKBOXES |
+			// LVS_EX_LABELTIP |
+			// LVS_EX_TRACKSELECT |
+			// LVS_EX_ONECLICKACTIVATE | LVS_EX_UNDERLINEHOT | LVS_EX_UNDERLINECOLD
 			);
 
+	// TRACKSELECT 스타일 적용시 호버링 필요
 	// unit: ms, -1(System Default)
-	ListView_SetHoverTime(hListView, 10);
-	CheckBox = GridLine = RowSelect = DragDrop = TRUE;
+	// ListView_SetHoverTime(hListView, 10);
+	CheckBox = FALSE;
+	GridLine = RowSelect = DragDrop = TRUE;
 
-	int CellWidth	= ListViewWidth / nHeaders;
+	int CellWidth = ListViewWidth / nHeaders;
 
-	// TODO: 디자인 끝낸 후 사용자가 항목 늘릴 수 있도록 확장
 	for(int i=0; i<nHeaders; i++){
 		RegisterHeader(hListView, LVCF_FMT | LVCF_WIDTH | LVCF_TEXT | LVCF_SUBITEM, LVCFMT_LEFT, CellWidth, HeaderName[i], i);
 	}
@@ -1775,7 +1819,7 @@ LRESULT MainWindow::OnDestroy(WPARAM wParam, LPARAM lParam) {
 	RemoveProp(_hWnd, L"CallBackEditWndProc");
 	RemoveProp(_hWnd, L"CallBackButtonWndProc");
 
-	SavePosition(_hWnd, HKEY_CURRENT_USER, L"SoftWare\\SicSoft\\InitInfo\\LastPosition");
+	SavePosition(_hWnd, HKEY_CURRENT_USER, KEY_PATH_POSITION);
     PostQuitMessage(0);
     return 0;
 }
@@ -1921,7 +1965,6 @@ LRESULT MainWindow::OnTimer(WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-// TODO: 리스트뷰 사이즈 조정 기능 - 컨트롤 및 디자인 끝낸 후 추가 예정
 LRESULT MainWindow::OnLButtonDown(WPARAM wParam, LPARAM lParam){
 	return 0;
 }
@@ -1938,54 +1981,13 @@ LRESULT MainWindow::OnActivateApp(WPARAM wParam, LPARAM lParam){
 	if(wParam == TRUE){
 		if(bInit){
 			bInit = FALSE;
-			LoadPosition(_hWnd, HKEY_CURRENT_USER, L"SoftWare\\SicSoft\\InitInfo\\LastPosition");
-			// 파일 불러오기
+			LoadPosition(_hWnd, HKEY_CURRENT_USER, KEY_PATH_POSITION);
+			LoadFile();
 		}
 	}
 
 	return 0;
 }
-
-/*	// 수행시간이 길어진다
-BOOL MoveToIndex(HWND hWnd, int nItems, int From, int To){
-	int		i = 0,
-			idx = 0;
-
-	LVITEM	li;
-
-	WCHAR** lpszPrevText = (WCHAR**)malloc(sizeof(WCHAR*) * nItems);
-	for(i=0; i<nItems; i++){
-		lpszPrevText[i] = (WCHAR*)malloc(sizeof(WCHAR) * 256);
-	}
-
-	for(i=0; i<nItems; i++){
-		ListView_GetItemText(hWnd, From, i, lpszPrevText[i], 256);
-	}
-
-	if(!ListView_DeleteItem(hWnd, From)) { return FALSE; }
-
-	// 항목 작성시 iSubItem을 지정하지 않으면 등록할 수 없다.
-	li.mask			= LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM; //| LVIF_STATE;
-	li.iItem		= To;
-	li.iSubItem		= 0;
-	li.pszText		= lpszPrevText[0];
-	li.lParam		= (LPARAM)lpszPrevText[0];
-	if((idx = ListView_InsertItem(hWnd, &li)) == -1) { return FALSE; }
-
-	i = 1;
-	while(i <= (nItems - 1)){
-		ListView_SetItemText(hWnd, idx, i, lpszPrevText[i]);
-		i++;
-	}
-
-	for(i=0; i<nItems; i++){
-		free(lpszPrevText[i]);
-	}
-	free(lpszPrevText);
-
-	return TRUE;
-}
-*/
 
 BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, DWORD dwType, PVOID Data, size_t Size){
 	LONG	ret;
@@ -2009,10 +2011,10 @@ BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWS
 		ret = RegSetValueEx(
 				hSubKey,
 				lpszKeyName,
-				0, // Reserved
+				0,					// Reserved
 				dwType,
 				(CONST BYTE*)Data,
-				Size
+				Size				// REG_SZ인 경우 NULL종료 문자 포함한 길이 전달
 		);
 
 		RegCloseKey(hSubKey);
@@ -2033,9 +2035,9 @@ BOOL WriteRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWS
 //	REG_FULL_RESOURCE_DESCRIPTOR:		full resource descriptor (자원 설명자)
 //	REG_RESOURCE_REQUIREMENTS_LIST:		resource requirements list (자원 요구 사항 목록)
 
-DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return){
+DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWSTR lpszKeyName, PVOID Return, DWORD Size){
 	LONG ret;
-	DWORD dwType, dwcbData;
+	DWORD dwType, dwcbData = Size;
 
 	HKEY	hSubKey;
 	DWORD	dwDisposition;
@@ -2048,7 +2050,6 @@ DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWS
 			&hSubKey
 	);
 
-	//
 	// ret = RegCreateKeyEx(
 	//		ParentKey,
 	//		lpszPath,
@@ -2065,7 +2066,8 @@ DWORD ReadRegistryData(HKEY hParentKey, LPCWSTR lpszPath, DWORD dwDesired, LPCWS
 	// 버퍼를 지정했는데 크기가 충분하지 않으면 ERROR_MORE_DATA를 반환하고 필요한 버퍼 크기를 dwcbData에 저장한다.
 	// 버퍼를 지정하지 않고 마지막 인수인 dwcbData를 지정한 경우 ERROR_SUCCESS를 반환하고 데이터 크기를 dwcbData에 바이트 단위로 저장한다.
 	// lpszKeyName이 레지스트리에 없으면 ERROR_FILE_NOT_FOUND를 반환하고 버퍼에 아무런 값도 저장하지 않는다.
-	if(hSubKey){
+	if(hSubKey != NULL){
+		// dwcbData는 입출력용 인수이므로 호출시 전달되는 버퍼의 크기를 입력해야 한다.
 		ret = RegQueryValueEx(hSubKey, lpszKeyName, 0, &dwType, (LPBYTE)Return, &dwcbData);
 		RegCloseKey(hSubKey);
 	}
@@ -2097,15 +2099,18 @@ void LoadPosition(HWND hWnd, HKEY hKey, LPCWSTR lpszPath){
 	SetRect(&DefaultRect, 30,30, 1024, 480);
 
 	DWORD dwType;
-	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"CurrentState", &WindowPlacement.showCmd);
-	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Left", &WindowPlacement.rcNormalPosition.left);
-	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Top", &WindowPlacement.rcNormalPosition.top);
-	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Right", &WindowPlacement.rcNormalPosition.right);
-	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Bottom", &WindowPlacement.rcNormalPosition.bottom);
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"CurrentState", &WindowPlacement.showCmd, sizeof(UINT));
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Left", &WindowPlacement.rcNormalPosition.left, sizeof(LONG));
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Top", &WindowPlacement.rcNormalPosition.top, sizeof(LONG));
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Right", &WindowPlacement.rcNormalPosition.right, sizeof(LONG));
+	dwType = ReadRegistryData(hKey, lpszPath, KEY_READ, L"Bottom", &WindowPlacement.rcNormalPosition.bottom, sizeof(LONG));
 
 	if(dwType == REG_NONE){
+		// 처음 실행될 때
+		// CenterWindow(hWnd);				// 사용 가능
 		WindowPlacement.showCmd = SW_SHOW;
 		CopyRect(&WindowPlacement.rcNormalPosition, &DefaultRect);
+
 	}
 
 	if(WindowPlacement.showCmd == SW_SHOWMINIMIZED){
