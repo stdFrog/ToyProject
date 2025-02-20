@@ -1513,8 +1513,9 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 		case IDM_POPUP1:
 			bMode = !bMode;
 			if(bMode == TRUE){
-				CheckMenuItem(hPopupTray, IDM_POPUP1, MF_BYCOMMAND | MF_CHECKED);
-				GetTodaySchedule();
+				if(GetTodaySchedule()){
+					CheckMenuItem(hPopupTray, IDM_POPUP1, MF_BYCOMMAND | MF_CHECKED);
+				}
 			}else{
 				CheckMenuItem(hPopupTray, IDM_POPUP1, MF_BYCOMMAND | MF_UNCHECKED);
 
@@ -2149,8 +2150,9 @@ LRESULT MainWindow::OnActivateApp(WPARAM wParam, LPARAM lParam){
 			LoadPosition(_hWnd, HKEY_CURRENT_USER, KEY_PATH_POSITION);
 			LoadFile();
 			if(bMode == TRUE){
-				CheckMenuItem(hPopupTray, IDM_POPUP1, MF_BYCOMMAND | MF_CHECKED);
-				GetTodaySchedule();
+				if(GetTodaySchedule()){
+					CheckMenuItem(hPopupTray, IDM_POPUP1, MF_BYCOMMAND | MF_CHECKED);
+				}
 
 				dwType = ReadRegistryData(HKEY_CURRENT_USER, KEY_PATH_POSITION, KEY_READ, L"Left", &PrevWndRect.left, sizeof(LONG));
 				dwType = ReadRegistryData(HKEY_CURRENT_USER, KEY_PATH_POSITION, KEY_READ, L"Top", &PrevWndRect.top, sizeof(LONG));
@@ -2321,7 +2323,7 @@ BOOL MainWindow::GetTodaySchedule(){
 		Day		= st.wDay,
 		TemplateDateLength		= wcslen(TEMPLATE_DATE),
 		TemplateDateUntilLength	= wcslen(TEMPLATE_DATE_UNTIL);
-		if(Index == -1){ return FALSE; }
+		if(Index == -1 || nCount == 0){ return FALSE; }
 
 	int i	= 0,
 		j	= 0,
