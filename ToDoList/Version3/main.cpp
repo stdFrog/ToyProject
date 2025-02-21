@@ -1595,7 +1595,7 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 					MaxLength = max(MaxLength, TextSize.cx);
 				}
 
-				int TextHeight = j * Metric.tmHeight;
+				int TextHeight = Metric.tmHeight;
 
 				RECT crt;
 				SetRect(&crt, 0,0, MaxLength, TextHeight);
@@ -1613,7 +1613,7 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 				int Width			= crt.right - crt.left,
 					Height			= crt.bottom - crt.top,
 					x				= ScreenWidth - Width,
-					y				= ScreenHeight - Height - GetSystemMetrics(SM_CYCAPTION),
+					y				= ScreenHeight - (Height * 2) - GetSystemMetrics(SM_CYCAPTION),
 					k				= 0;
 
 				if(MsgWnd != NULL){
@@ -1630,7 +1630,7 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 				i = nMsgWnds = j;
 				MsgWnd = (HWND*)malloc(sizeof(HWND) * nMsgWnds);
 				for(k=0; k<nMsgWnds; k++){
-					MsgWnd[k] = CreateWindowEx(dwExStyle, L"TodayScheduleMessageWindow", NULL, dwStyle, x, y - ((TextHeight / 2) * k), Width + 4, Height + 18, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+					MsgWnd[k] = CreateWindowEx(dwExStyle, L"TodayScheduleMessageWindow", NULL, dwStyle, x, y - ((TextHeight / 2) * k), Width + 4, Height + TextHeight + 18, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
 					SendMessage(MsgWnd[k], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)lpszCopy[(i-1)]);
 					--i;
 				}
