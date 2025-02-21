@@ -1607,13 +1607,22 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 				if(dwStyle & WS_VSCROLL){ crt.right += GetSystemMetrics(SM_CXVSCROLL); }
 				if(dwStyle & WS_HSCROLL){ crt.bottom += GetSystemMetrics(SM_CYHSCROLL); }
 
-				int ScreenWidth		= GetSystemMetrics(SM_CXFULLSCREEN);
-				int ScreenHeight	= GetSystemMetrics(SM_CYFULLSCREEN);
+				RECT WorkArea;
+				SystemParametersInfo(SPI_GETWORKAREA, 0, &WorkArea, 0);
+				int ScreenWidth		= WorkArea.right - WorkArea.left;
+				int ScreenHeight	= WorkArea.bottom - WorkArea.top;
 
-				int Width			= crt.right - crt.left,
+				APPBARDATA abData = {0,};
+				abData.cbSize = sizeof(abData);
+				if(SHAppBarMessage(ABM_GETTASKBARPOS, &abData) & ABS_AUTOHIDE){
+					GetWindowRect(FindWindow(L"Shell_TrayWnd", NULL), &abData.rc);
+				}
+
+				int TaskBarHeight	= abData.rc.bottom - abData.rc.top,
+					Width			= crt.right - crt.left,
 					Height			= crt.bottom - crt.top,
-					x				= ScreenWidth - Width,
-					y				= ScreenHeight - (Height * 2) - GetSystemMetrics(SM_CYCAPTION),
+					x				= 0,
+					y				= 0,
 					k				= 0;
 
 				if(MsgWnd != NULL){
@@ -1629,8 +1638,16 @@ LRESULT MainWindow::OnCommand(WPARAM wParam, LPARAM lParam){
 
 				i = nMsgWnds = j;
 				MsgWnd = (HWND*)malloc(sizeof(HWND) * nMsgWnds);
+
+				Width	+= 4;
+				Height	+= (TextHeight + 18);
+				// x		= ScreenWidth - Width;
+				// y		= ScreenHeight - (TaskBarHeight + Height);
+				x		= ScreenWidth - Width;
+				y		= ScreenHeight - (TaskBarHeight + Height);
 				for(k=0; k<nMsgWnds; k++){
-					MsgWnd[k] = CreateWindowEx(dwExStyle, L"TodayScheduleMessageWindow", NULL, dwStyle, x, y - ((TextHeight / 2) * k), Width + 4, Height + TextHeight + 18, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+				//	MsgWnd[k] = CreateWindowEx(dwExStyle, L"TodayScheduleMessageWindow", NULL, dwStyle, x, y - (((Height - 18) / 2) *k), Width, Height, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
+					MsgWnd[k] = CreateWindowEx(dwExStyle, L"TodayScheduleMessageWindow", NULL, dwStyle, x, y - ((Height - 18) * k), Width, Height, _hWnd, (HMENU)NULL, GetModuleHandle(NULL), NULL);
 					SendMessage(MsgWnd[k], WM_TODAYSCHEDULE, (WPARAM)0, (LPARAM)lpszCopy[(i-1)]);
 					--i;
 				}
